@@ -41,13 +41,13 @@ export function App() {
     useIdentity((id) => postAuthRef.current(id));
 
   // The companion (local-first; per-identity). Autosaves under the fingerprint.
-  const { wisp, setWisp, wispView, setWispView, load: loadCompanion } =
+  const { wisp, setWisp, wispView, setWispView, load: loadCompanion, grant } =
     useCompanion(identity?.fingerprint ?? null);
 
-  // The Relay link (optional) and the social layer that rides it. FRIENDS-place
-  // navigation (which row, which open thread) is UI state and stays here.
+  // The Relay link (optional) and the social layer that rides it. Participation
+  // grows Hearts via `grant`. FRIENDS-place nav state stays here.
   const link = useRelay();
-  const social = useSocial(identity, link);
+  const social = useSocial(identity, link, grant);
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
 

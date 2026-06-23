@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { open, seal, type Identity } from "@core/identity/index.ts";
+import type { Heart } from "@core/companion/index.ts";
 import {
   compareHlc, decodeHlc, encodeHlc, HybridLogicalClock, SubType,
 } from "@core/protocol/index.ts";
@@ -22,7 +23,11 @@ const roomKey = (line: RoomLine) => `${line.senderFp}:${line.ts.wallMs}.${line.t
 // HLC-ordered main chatroom. Reads/sends through the Relay link; persists
 // buddies per-identity. The inbound handler is bound once and reads current
 // state through refs, so it never goes stale.
-export function useSocial(identity: Identity | null, link: Relay) {
+export function useSocial(
+  identity: Identity | null,
+  link: Relay,
+  onActivity: (heart: Heart, amount: number) => void,
+) {
   const [buddies, setBuddies] = useState<Buddy[]>([]);
   const [nearby, setNearby] = useState<Presence[]>([]);
   const [dmThreads, setDmThreads] = useState<DmThreads>({});
@@ -68,7 +73,9 @@ export function useSocial(identity: Identity | null, link: Relay) {
     if (f.subtype === SubType.PRESENCE) {
       const p = decodePresence(f.payload);
       if (!p || p.fingerprint === me.fingerprint) return; // ignore self / forged
+      const isNew = !nearbyRef.current.some((x) => x.fingerprint === p.fingerprint);
       setNearby((prev) => [...prev.filter((x) => x.fingerprint !== p.fingerprint), p].slice(-30));
+      if (isNew) onActivity("journey", 2); // discovering the world grows Journey
     } else if (f.subtype === SubType.IM) {
       const env = decodeDM(f.payload);
       if (!env || env.recipientFp !== me.fingerprint) return; // not addressed to us
@@ -115,6 +122,8 @@ export function useSocial(identity: Identity | null, link: Relay) {
       pubkey: bytesToHex(p.publicKey),
       addedAt: Date.now(),
     }));
+    onActivity("signal", 6); // friends grow Signal
+    onActivity("journey", 2); // …and meeting them, Journey
     sfx("accept");
   };
 
@@ -126,6 +135,7 @@ export function useSocial(identity: Identity | null, link: Relay) {
       const ts = hlcRef.current.send();
       link.send(SubType.POST, encodeRoomMsg(MAIN_ROOM, encodeHlc(ts), me.fingerprint, me.handle, t));
       ingestRoom({ ts, senderFp: me.fingerprint, handle: me.handle, text: t, mine: true });
+      onActivity("broadcast", 4); // posting in the Commons grows Broadcast
       sfx("accept");
     } else {
       sfx("error");
@@ -140,6 +150,7 @@ export function useSocial(identity: Identity | null, link: Relay) {
       const sealed = seal(me.secretKey, hexToBytes(buddy.pubkey), new TextEncoder().encode(t));
       link.send(SubType.IM, encodeDM(buddy.fingerprint, me.fingerprint, sealed));
       setDmThreads((d) => ({ ...d, [buddy.fingerprint]: [...(d[buddy.fingerprint] ?? []), { out: true, text: t }] }));
+      onActivity("signal", 3); // private messages grow Signal
       sfx("accept");
     } else {
       sfx("error");
