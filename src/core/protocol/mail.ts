@@ -54,3 +54,17 @@ export function decodeMail(payload: Uint8Array): MailEnvelope | null {
   const senderHandle = fromUtf8(payload.subarray(o, o + hLen)); o += hLen;
   return { recipientFp, senderFp, mailId, senderHandle, sealed: payload.subarray(o) };
 }
+
+// ---- Mail ack: the recipient confirms receipt so held copies can be dropped ----
+// Layout: [recipientFp:6][mailId:4]
+
+export interface MailAck { recipientFp: string; mailId: number }
+
+export function encodeMailAck(recipientFp: string, mailId: number): Uint8Array {
+  return concat(hexToBytes(recipientFp), u32(mailId));
+}
+
+export function decodeMailAck(payload: Uint8Array): MailAck | null {
+  if (payload.length < FP_LEN + 4) return null;
+  return { recipientFp: bytesToHex(payload.subarray(0, FP_LEN)), mailId: readU32(payload, FP_LEN) };
+}

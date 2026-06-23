@@ -17,3 +17,6 @@ firmware/heltec-v3/data/
 native/**/build/
 native/**/.gradle/
 native/**/local.properties
+
+# Station daemon held-mail store (encrypted at rest; local)
+tools/station/.mailbox-*.json

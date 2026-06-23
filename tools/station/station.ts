@@ -10,9 +10,11 @@
 import { RelayClient } from "@app/RelayClient.ts";
 import { deriveIdentity } from "@core/identity/index.ts";
 import {
-  encodeStationBeacon, SERVICE, serviceTags, SubType, subTypeName,
+  decodeMailAck, encodeStationBeacon, SERVICE, serviceTags, SubType, subTypeName,
 } from "@core/protocol/index.ts";
+import { decodePresence } from "@core/protocol/social.ts";
 import { SerialTransport } from "../harness/SerialTransport.ts";
+import { Mailbox } from "./mailbox.ts";
 
 const PORT = process.env.ZYPICO_STATION_PORT ?? "/dev/ttyUSB0";
 const NAME = process.env.ZYPICO_STATION_NAME ?? "HarborLight";
@@ -30,14 +32,29 @@ async function main(): Promise<void> {
   // login. It is NOT a Traveler identity.
   const id = await deriveIdentity(NAME, ADMIN_PW);
   const client = new RelayClient(new SerialTransport(PORT));
+  const store = process.env.ZYPICO_STATION_STORE ?? `tools/station/.mailbox-${id.fingerprint}.json`;
+  const mailbox = new Mailbox(store);
 
   client.onInbound((f) => {
-    // Slice 1 just observes; later slices act on MAIL/PAGE_REQ/etc.
-    log(`rx ${subTypeName(f.subtype)} (${f.payload.length}B, ${f.hops} hops)`);
+    if (f.subtype === SubType.MAIL) {
+      // Hold the (opaque) mail; we forward it when the recipient appears.
+      if (mailbox.store(f.payload)) log(`held mail (now ${mailbox.count})`);
+    } else if (f.subtype === SubType.PRESENCE) {
+      const p = decodePresence(f.payload);
+      if (!p) return;
+      const pending = mailbox.forwardFor(p.fingerprint);
+      for (const payload of pending) client.send(SubType.MAIL, payload);
+      if (pending.length) log(`forwarded ${pending.length} mail to ${p.handle} (${p.fingerprint})`);
+    } else if (f.subtype === SubType.MAIL_ACK) {
+      const ack = decodeMailAck(f.payload);
+      if (ack && mailbox.drop(ack.recipientFp, ack.mailId)) log(`mail acked + dropped (now ${mailbox.count})`);
+    } else {
+      log(`rx ${subTypeName(f.subtype)} (${f.payload.length}B, ${f.hops} hops)`);
+    }
   });
 
   await client.connect();
-  log(`"${NAME}" up on ${PORT}  id=${id.fingerprint}  services=[${serviceTags(SERVICES).join(" ")}]`);
+  log(`"${NAME}" up on ${PORT}  id=${id.fingerprint}  services=[${serviceTags(SERVICES).join(" ")}]  held=${mailbox.count}`);
 
   const beacon = () => client.send(SubType.STATION, encodeStationBeacon(id, SERVICES));
   beacon();

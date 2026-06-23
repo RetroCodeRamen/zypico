@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { open, seal, type Identity } from "@core/identity/index.ts";
-import { decodeMail, encodeMail, SubType } from "@core/protocol/index.ts";
+import { decodeMail, decodeMailAck, encodeMail, encodeMailAck, SubType } from "@core/protocol/index.ts";
 import {
   type InboxMail, type OutboxMail,
   addInbox, loadInbox, loadOutbox, saveInbox, saveOutbox,
@@ -40,21 +40,29 @@ export function usePostOffice(
     return true;
   };
 
-  // Receive mail addressed to us, sealed E2E.
+  // Receive mail addressed to us (sealed E2E), and ack so Stations/senders learn
+  // it arrived; learn delivery of our own outbox mail from others' acks.
   useEffect(() => link.onInbound((f) => {
-    if (f.subtype !== SubType.MAIL) return;
     const me = identityRef.current;
     if (!me) return;
-    const env = decodeMail(f.payload);
-    if (!env || env.recipientFp !== me.fingerprint) return;
-    const pub = resolveRef.current(env.senderFp);
-    if (!pub) return; // unknown sender — can't open
-    const opened = open(me.secretKey, pub, env.sealed);
-    if (!opened) return;
-    setInbox((list) => addInbox(list, {
-      id: env.mailId, fromFp: env.senderFp, handle: env.senderHandle,
-      text: fromUtf8(opened), at: Date.now(), read: false,
-    }));
+    if (f.subtype === SubType.MAIL) {
+      const env = decodeMail(f.payload);
+      if (!env || env.recipientFp !== me.fingerprint) return;
+      const pub = resolveRef.current(env.senderFp);
+      if (!pub) return; // unknown sender — can't open
+      const opened = open(me.secretKey, pub, env.sealed);
+      if (!opened) return;
+      setInbox((list) => addInbox(list, {
+        id: env.mailId, fromFp: env.senderFp, handle: env.senderHandle,
+        text: fromUtf8(opened), at: Date.now(), read: false,
+      }));
+      // Confirm receipt — held copies (Stations) drop, the sender marks delivered.
+      link.send(SubType.MAIL_ACK, encodeMailAck(me.fingerprint, env.mailId));
+    } else if (f.subtype === SubType.MAIL_ACK) {
+      const ack = decodeMailAck(f.payload);
+      if (!ack) return;
+      setOutbox((list) => list.map((m) => (m.id === ack.mailId && m.toFp === ack.recipientFp ? { ...m, delivered: true } : m)));
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 

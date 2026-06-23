@@ -12,6 +12,7 @@ export enum SubType {
   // private messaging
   IM = 0x10,
   MAIL = 0x11,
+  MAIL_ACK = 0x12, // recipient confirms receipt (Stations drop held mail; sender marks delivered)
 
   // communities
   POST = 0x20,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { deriveIdentity, open, seal } from "@core/identity/index.ts";
-import { decodeMail, encodeMail } from "./mail.ts";
+import { decodeMail, decodeMailAck, encodeMail, encodeMailAck } from "./mail.ts";
 
 describe("mail envelope", () => {
   it("round-trips addressing, id, sender handle, and a sealed body", async () => {
@@ -21,5 +21,15 @@ describe("mail envelope", () => {
 
   it("rejects a too-short mail", () => {
     expect(decodeMail(new Uint8Array(8))).toBeNull();
+  });
+});
+
+describe("mail ack", () => {
+  it("round-trips recipient + mailId", async () => {
+    const b = await deriveIdentity("Recipient", "pw-b");
+    const ack = decodeMailAck(encodeMailAck(b.fingerprint, 0xcafe1234));
+    expect(ack).not.toBeNull();
+    expect(ack!.recipientFp).toBe(b.fingerprint);
+    expect(ack!.mailId).toBe(0xcafe1234);
   });
 });
