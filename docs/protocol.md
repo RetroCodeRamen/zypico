@@ -6,17 +6,19 @@
 > view). This document is the byte-level contract; the plan calls it "the first
 > task of Phase 1."
 
-_Status: draft v0.1 · Last updated 2026-06-20 · covers the Phase-1 spine
-(framing, sub-types, HLC, dedupe, fragmentation, airtime governor)._
+_Status: draft v0.2 · Last updated 2026-06-22 · spine (framing, sub-types, HLC,
+dedupe, fragmentation, governor) + identity/social layer._
 
-All ZyPico traffic rides **one private Meshtastic portnum** (`PRIVATE_APP`, 256).
-The portnum says "this is ZyPico"; everything below distinguishes message kinds
-and handles reliability. **Binary only — never JSON over the air** (plan §12).
-Multi-byte integers are **big-endian** unless noted.
+All ZyPico traffic is **binary only — never JSON over the air** (plan §12).
+Multi-byte integers are **big-endian** unless noted. The transport
+(`MeshTransport`) carries opaque RelayProtocol frame bytes and knows nothing of
+the structure below.
 
-The transport (`MeshTransport`) carries opaque frame bytes and knows nothing of
-the structure below. Each Meshtastic packet also gives us, out of band, the
-sender node number and a sender-assigned 32-bit packet id — used for dedupe.
+**The board link (current transport).** A ZyPico board (Heltec V3) bridges a
+WebSocket to its LoRa radio (ADR 0004). Over LoRa it prepends a tiny MAC header
+to each RelayProtocol frame: `[srcId:u32][seq:u16][frame…]`. The board hands the
+browser the `srcId` (sender) and `seq` (per-sender counter) out of band — these
+feed dedupe, the way a node number + packet id would on a Meshtastic transport.
 
 ---
 
@@ -147,11 +149,39 @@ which keeps it fully deterministic under test.
 
 ---
 
-## 7. Still to come (Phase 1 remainder)
+## 7. Identity & social layer (Phase 2/3)
 
-- **ACK / NACK envelopes** (`0xF1`/`0xF2`) and the selective-repeat retransmit
-  loop wired through the governor + outbox.
-- **Store-and-forward outbox** — persist unsent/unacked frames (IndexedDB) so a
-  message survives a disconnect and resumes.
-- **Companion data model + IndexedDB stores** (plan §8 Phase 1).
-- **Signing** (`SIGNED` flag) — Phase 2, when the crypto module lands.
+Identity is an **Ed25519 keypair** derived from handle + password via Argon2id
+(`core/identity`). The **fingerprint** is the first 12 hex of `sha256(pubkey)`
+(6 bytes). Addressing is by fingerprint, not node — so it survives roaming.
+
+**Presence beacon** (`PRESENCE` 0x01) — discovery; signed so a hearer knows the
+sender holds the key:
+
+| field | size | notes |
+|-------|-----:|-------|
+| pubkey    | 32 | Ed25519 public key |
+| signature | 64 | Ed25519 over `pubkey ‖ handle` |
+| handleLen | 1  | |
+| handle    | …  | UTF-8 |
+
+**Direct message** (`IM` 0x10) — addressed + end-to-end encrypted:
+
+| field | size | notes |
+|-------|-----:|-------|
+| recipientFp | 6 | recipient fingerprint |
+| senderFp    | 6 | sender fingerprint |
+| sealed      | … | `nonce:24 ‖ XChaCha20-Poly1305 ciphertext` |
+
+Sealing: X25519 (from the Ed25519 keys) → shared secret → HKDF-SHA256 → AEAD key
+(`core/identity/seal`). Everyone hears the ciphertext; only the recipient opens it.
+
+## 8. Still to come
+
+- **Chatrooms** — a room-id-tagged public message type; the main room as a lobby.
+- **History backfill on join** — advertise-then-pull (`MANIFEST`/`PULL_REQ`/
+  `PULL_SERVE`, 0x60–0x62): last ~10 msgs / 15 min of the main room, with
+  responder jitter+suppression so only one peer answers.
+- **ACK / NACK** (`0xF1`/`0xF2`) + selective-repeat retransmit; **store-and-forward
+  outbox** so messages survive a disconnect.
+- **Persistence** — DM/room history + companion in IndexedDB (Dexie).

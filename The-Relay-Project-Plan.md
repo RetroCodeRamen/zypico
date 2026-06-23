@@ -6,13 +6,29 @@ _Status: draft v1 · Last updated 2026-06-20_
 
 **Related docs:** [The-Relay-Outline-v2.md](The-Relay-Outline-v2.md) (product spec) · [The-Relay-Screens.html](The-Relay-Screens.html) (visual reference — Home, Instant Messenger, Lua editor, Onboarding) · [docs/protocol.md](docs/protocol.md) (RelayProtocol wire spec) · [docs/adr/](docs/adr/) (decision records).
 
-**Build progress (2026-06-20):**
-- **Phase 0 — done.** Repo scaffolded (Vite + React + TS strict), PWA + service worker, Vitest. ADR 0001 (React), ADR 0002 (crypto deferred to Phase 2). Production build green.
-- **Phase 1 — in progress.** Done: `MeshTransport` facade + `HttpTransport`; RelayProtocol common header + sub-type catalog (version skipping, unknown-subtype tolerance); **HLC ordering, dedupe, fragmentation + selective-repeat reassembly, exact-formula airtime estimator, and the airtime governor** (prioritized queue + region-aware token bucket + adaptive backpressure) — all unit-tested. `RelayClient` wires dedupe + reassembly inbound and fragmentation + governor pacing outbound. Wire spec written ([docs/protocol.md](docs/protocol.md)). **Remaining:** ACK/NACK + selective-repeat retransmit, store-and-forward outbox, companion data model + IndexedDB, then the 2-node real-hardware round-trip that closes the phase.
-- **UI shell (workstream §7) — Tamagotchi rebuild.** The interface is a 4× Tamagotchi: a single LCD plate with hi-res vector place-icons (4 above + 4 below) framing the **128×80, 16-color dot matrix**; **all content/menus render inside the matrix** (3×5 bitmap font). Driven by **three buttons** — SELECT (move highlight), ACCEPT (enter/confirm), CANCEL (deselect → idle home). Home idles with **no icon highlighted** until SELECT (Tamagotchi-true). PICO-8 play-window palette, early-2000s candy colorway, **uniform scale-to-fit** (preserves aspect ratio on phone + desktop). **On-screen QWERTY keyboard** below the buttons (page chrome, not on the LCD — see [[keyboard-placement]] memory) with an in-LCD text-entry mode; arrow keys map ←/↓/→ = SELECT/ACCEPT/CANCEL. RADIO connect is wired to the real transport.
-- **Transport / deployment (ADR 0004, supersedes 0003) — board IS the device.** After dead ends (Meshtastic Android removed its third-party API; Web Bluetooth fails on Android bonding), settled on the project's hardware end-goal early: a **Heltec WiFi LoRa 32 V3** runs custom firmware (`firmware/heltec-v3/`) as a **WiFi access point** that serves the bundled ZyPico UI from flash and bridges a **WebSocket ↔ SX1262 LoRa** (RadioLib). The browser runs the whole UI + RelayProtocol; `BoardTransport` (WebSocket) implements the `MeshTransport` facade — web app otherwise unchanged. **Fully offline** (board AP, no internet, no `INTERNET`-equivalent). ZyPico-only LoRa net (not Meshtastic-compatible). Ports to T-Deck (same ESP32-S3 + SX1262). Toolchain (JDK/Android SDK/Gradle, PlatformIO) installed under `~/.local/zypico-android/`. Shelved alternatives still in-tree behind the facade: `HttpTransport`, `BleTransport`, `MeshServiceTransport` (ADR 0003 native shell).
-- **Messaging (workstream §4, Phase 3) — started.** MAIL is a live message screen: ACCEPT opens the keyboard to compose, messages **broadcast over LoRa** as plaintext IM frames (E2E is Phase 2), and sent/received traffic shows in an in-LCD log. Sending grants the **Signal heart** — the first real activity→heart hook (retires the dev raise for Signal). Chiptune SFX on connect/error/send. **Next:** addressed/E2E DMs (needs identity), store-and-forward outbox for offline compose, and IM vs Mail split.
-- **Companion (workstream §3, Phase 5) — started.** Framework-agnostic **hearts engine**: five Hearts (Signal/Arena/Journey/Broadcast/Craft), four tiers (Flicker→Ember→Glow→Beacon), the full **1→2→4→8 evolution tree** with natural drift (form derived from hearts; tier monotonic). Unit-tested. Wisp **persists locally** (localStorage; Dexie later), renders procedurally on HOME (animated, tinted by form), and has a **MY WISP** detail screen (creature, form, age, five heart meters) reachable via PROFILE. Hearts grow via a labeled bootstrap "raise" action until real activity hooks (messaging→Signal, games→Arena, etc.) land. Tests: 77 total.
+**Build progress (last updated 2026-06-22 · 89 unit tests passing):**
+
+**Deployment shape (settled — ADR 0004).** ZyPico runs on the **device itself**: a
+**Heltec WiFi LoRa 32 V3** flashed with custom firmware (`firmware/heltec-v3/`)
+runs as a **WiFi access point**, serves the bundled web UI from flash, and bridges
+a **WebSocket ↔ SX1262 LoRa** (RadioLib). The browser (phone) runs the whole UI +
+RelayProtocol; `BoardTransport` (WebSocket) is the only live `MeshTransport`.
+**Fully offline** (board AP, no `INTERNET` permission/equivalent), one device per
+board, unique AP name per board, OLED shows status. **Validated on two real
+boards:** bidirectional LoRa at 915 MHz proven end-to-end. Ports to T-Deck (same
+ESP32-S3 + SX1262). _Earlier abandoned routes (Android app via Meshtastic AIDL/SDK,
+Web Bluetooth, HTTP-to-node) were removed in the cleanup — see git history / ADR
+0003 (superseded)._
+
+**Done:**
+- **Phase 0 — setup.** Vite + React + TS strict, Vitest, ADR 0001 (React), 0002 (crypto).
+- **Phase 1 — protocol spine.** RelayProtocol header + sub-type catalog; **HLC ordering, dedupe, fragmentation + selective-repeat reassembly, exact-formula airtime estimator + airtime governor** — all unit-tested. `RelayClient` does dedupe/reassembly inbound, fragmentation/governor pacing outbound, and exposes typed `send` + raw `onInbound`. Wire spec: [docs/protocol.md](docs/protocol.md).
+- **Phase 2 — identity & crypto.** **Login gate before anything** (handle + password → Ed25519 keypair via Argon2id; offline, no reset; per-identity local state). Signed **presence beacons**, and **end-to-end DMs** (X25519 + XChaCha20-Poly1305). `@noble/*`.
+- **UI shell (§7) — Tamagotchi.** One LCD plate: hi-res vector place-icons framing the **128×80 16-color dot matrix** (all menus render inside it, 3×5 font). **Three buttons** (SELECT/ACCEPT/CANCEL; arrows ←/↓/→), idle home with no icon selected, PICO-8 palette, early-2000s colorway, uniform scale-to-fit, **on-screen QWERTY** below the buttons (see [[keyboard-placement]]), chiptune SFX.
+- **Companion (§3, Phase 5).** Hearts engine (five Hearts; Flicker→Ember→Glow→Beacon; full 1→2→4→8 tree + drift). Wisp persists **per-identity** (localStorage), renders procedurally + animated on HOME, **MY WISP** detail under PROFILE. Hearts grown via a **dev-only** raise action until real activity hooks land.
+- **Social (§4/§8, Phase 3).** **FRIENDS** = discovery (nearby from presence) → add buddy (TOFU key pin) → **encrypted DM threads**. MAIL folded in.
+
+**Next (see discussion):** Relay **chatrooms** (main public room + others) with **join-time history backfill** (last ~10 msgs / 15 min, advertise-then-pull); **persistence** (DM/room history, Dexie); real **activity→heart** hooks; companion lineage/gift.
 
 **Design status:** the spec is build-ready. Identity/crypto, transport/mesh, companion model, sandbox, and the visual system are all decided. Four screens are designed and the surface grammar is proven. Remaining unknowns are best resolved during implementation, not further outlining.
 

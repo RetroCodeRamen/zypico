@@ -1,6 +1,12 @@
 # ADR 0003 — Android app shell + Meshtastic service bridge
 
-_Status: accepted · 2026-06-21 · Phase 3_
+_Status: **SUPERSEDED** by ADR 0004 · 2026-06-21 · Phase 3_
+
+> **Superseded.** The current Meshtastic Android app removed its third-party
+> service API (`onBind` returns null, no exported AIDL), so this route is not
+> possible. We moved to running ZyPico on the board itself (ADR 0004). The
+> `native/android/` scaffold and the `MeshServiceTransport` adapter were removed
+> in the 2026-06-22 cleanup (recoverable in git history). Kept here as a record.
 
 ## Context
 The target deployment is an **Android phone that already runs the Meshtastic

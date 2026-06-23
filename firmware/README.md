@@ -20,8 +20,8 @@ From the repo root:
 # 1. Build the web UI
 npm run build
 
-# 2. Bundle it into the firmware's LittleFS image
-rm -rf firmware/heltec-v3/data/* && cp -r dist/* firmware/heltec-v3/data/
+# 2. Bundle it into the firmware's LittleFS image (data/ is gitignored — generated)
+mkdir -p firmware/heltec-v3/data && rm -rf firmware/heltec-v3/data/* && cp -r dist/* firmware/heltec-v3/data/
 
 # 3. Build + flash the firmware (board on USB)
 cd firmware/heltec-v3

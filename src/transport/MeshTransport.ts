@@ -40,7 +40,8 @@ export interface SendOptions {
 export type Unsubscribe = () => void;
 
 export interface MeshTransport {
-  readonly kind: "http" | "ble" | "serial" | "hardware" | "service" | "wifi";
+  /** "wifi" = a ZyPico board over WebSocket today; the facade can take more. */
+  readonly kind: "wifi" | "hardware";
   readonly status: TransportStatus;
   /** Our own node number once known (after connect/configure). */
   readonly selfNodeNum: number | undefined;
@@ -55,17 +56,6 @@ export interface MeshTransport {
   onFrame(handler: (frame: InboundFrame) => void): Unsubscribe;
   /** Subscribe to status transitions. Returns an unsubscribe fn. */
   onStatus(handler: (status: TransportStatus) => void): Unsubscribe;
-}
-
-/** Reject after `ms` if `p` hasn't settled — so a stalled handshake fails loud. */
-export function withTimeout<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(message)), ms);
-    p.then(
-      (v) => { clearTimeout(timer); resolve(v); },
-      (e) => { clearTimeout(timer); reject(e); },
-    );
-  });
 }
 
 /** Minimal multi-listener event source shared by transport adapters. */

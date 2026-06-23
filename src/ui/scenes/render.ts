@@ -61,12 +61,6 @@ export interface WispView {
   cursor: number;
 }
 
-/** One line in the message log (out = sent by us). */
-export interface MessageLine {
-  out: boolean;
-  text: string;
-}
-
 /** The login/onboarding gate, shown before anything else. */
 export interface LoginView {
   mode: "create" | "login";
@@ -241,27 +235,6 @@ export function drawRadio(buf: PixelBuffer, place: PlaceDef, state: NavState, re
       drawTextCentered(buf, 67, "USE CONNECT TO LINK", C.dim);
     }
   }
-}
-
-/** MAIL — a scrolling message log over the mesh; ACCEPT writes a new one. */
-export function drawMail(buf: PixelBuffer, messages: MessageLine[], relay: RelayView): void {
-  buf.clear(C.bg);
-  drawText(buf, 3, 2, "MAIL", C.title);
-  drawText(buf, buf.width - measureText("REL") - 3, 2, "REL", relay.online ? C.ok : C.tagRelay);
-  divider(buf, 9);
-
-  if (messages.length === 0) {
-    drawTextCentered(buf, 30, "NO MESSAGES YET", C.dim);
-    drawTextCentered(buf, 40, relay.online ? "ACCEPT TO WRITE" : "CONNECT IN RADIO", C.dim);
-  } else {
-    const maxChars = Math.floor((buf.width - 4) / CELL_W);
-    messages.slice(-7).forEach((m, i) => {
-      const line = `${m.out ? ">" : "<"}${m.text}`;
-      drawText(buf, 2, 12 + i * 7, line.slice(0, maxChars), m.out ? C.textHi : C.ok);
-    });
-  }
-  buf.fillRect(0, 72, buf.width, 8, C.ground);
-  drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
 }
 
 export function drawEditor(buf: PixelBuffer, frame: number, edit: EditView): void {
