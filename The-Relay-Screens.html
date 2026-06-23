@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Relay — Screen Gallery v1</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabler-icons/3.31.0/iconfont/tabler-icons.min.css">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{ --font-mono:'JetBrains Mono', ui-monospace, monospace; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:#E9E3D6; color:#4A4441; font-family:var(--font-mono); padding:32px 16px 64px; }
+  .page{ max-width:920px; margin:0 auto; }
+  h1{ font-size:24px; font-weight:500; color:#3A3F2A; margin:0 0 4px; letter-spacing:2px; }
+  .sub{ font-size:13px; color:#7A6A4A; margin:0 0 20px; }
+  .legend{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; background:#F3E6CF; border:2px solid #E2CDA6; border-radius:14px; padding:12px 16px; margin-bottom:28px; font-size:12px; color:#7A6A4A; }
+  .legend b{ color:#3A3F2A; font-weight:500; }
+  .sw{ display:inline-block; width:14px; height:14px; border-radius:4px; vertical-align:-2px; margin-right:5px; border:1px solid rgba(0,0,0,.15); }
+  .gallery{ display:flex; flex-direction:column; gap:34px; }
+  .shot{ }
+  .cap{ font-size:14px; font-weight:500; color:#3A3F2A; margin:0 0 10px; }
+  .cap span{ font-weight:400; color:#7A6A4A; }
+  .stage{ display:flex; justify-content:center; }
+  .col{ display:flex; flex-direction:column; align-items:center; gap:10px; }
+  .sr-only{ position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0; }
+  .foot{ margin-top:40px; font-size:12px; color:#9A8C6A; text-align:center; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>the relay — screen gallery</h1>
+  <p class="sub">draft v1 · companion to The-Relay-Outline-v2.md · canvas 320×240 (T-Deck), play window 128×80 / 16-color</p>
+
+  <div class="legend">
+    <span><b>colorway:</b></span>
+    <span><span class="sw" style="background:#F3E6CF"></span>cream shell</span>
+    <span><span class="sw" style="background:#0F6E56"></span>teal icons</span>
+    <span><span class="sw" style="background:#F0997B"></span>coral accent</span>
+    <span><span class="sw" style="background:#5DCAA5"></span>teal accent</span>
+    <span><span class="sw" style="background:#E8EEDA"></span>pale-LCD surface</span>
+    <span><span class="sw" style="background:#15171D"></span>dark play scene</span>
+  </div>
+
+  <div class="gallery">
+
+    <section class="shot">
+      <h2 class="cap">1 · Home <span>— resting face: two icon rows frame the 128×80 play window where the Wisp lives</span></h2>
+      <div class="stage">
+        <div style="width:474px; background:#F3E6CF; border:3px solid #E2CDA6; border-radius:26px; padding:16px 20px 18px;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:14px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:#5DCAA5;"></span>
+            <span style="font-family:var(--font-mono); font-size:13px; letter-spacing:2px; color:#8A7350;">the relay</span>
+            <span style="width:8px; height:8px; border-radius:50%; background:#E8927C;"></span>
+          </div>
+          <div style="display:flex; justify-content:space-around; margin-bottom:12px;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-radio" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Relay</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-mail" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Mail</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-users" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Friends</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-user" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Profile</span></div>
+          </div>
+          <div style="display:flex; justify-content:center;">
+            <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:7px;">
+              <svg viewBox="0 0 128 80" width="272" height="170" style="display:block; image-rendering:pixelated; border-radius:4px;">
+                <rect x="0" y="0" width="128" height="62" fill="#AEE3E8"/><rect x="0" y="62" width="128" height="18" fill="#9CCF76"/><rect x="0" y="62" width="128" height="3" fill="#7EC05A"/>
+                <rect x="20" y="14" width="3" height="3" fill="#FFF1E8"/><rect x="101" y="20" width="3" height="3" fill="#FFF1E8"/><rect x="30" y="40" width="2" height="2" fill="#FFFFFF"/><rect x="96" y="46" width="2" height="2" fill="#FFFFFF"/><rect x="108" y="12" width="3" height="3" fill="#5DCAA5"/>
+                <rect x="52" y="64" width="24" height="4" fill="#6FAE53"/>
+                <rect x="60" y="14" width="4" height="4" fill="#E2562B"/><rect x="60" y="18" width="8" height="6" fill="#E2562B"/><rect x="62" y="18" width="4" height="4" fill="#FFD86B"/>
+                <rect x="56" y="24" width="16" height="4" fill="#F5A33C"/><rect x="48" y="28" width="32" height="4" fill="#F5A33C"/><rect x="44" y="32" width="40" height="4" fill="#F5A33C"/><rect x="44" y="36" width="40" height="4" fill="#F5A33C"/><rect x="44" y="40" width="40" height="4" fill="#F5A33C"/><rect x="44" y="44" width="40" height="4" fill="#F5A33C"/><rect x="48" y="48" width="32" height="4" fill="#F5A33C"/><rect x="56" y="52" width="16" height="4" fill="#F5A33C"/>
+                <rect x="56" y="28" width="16" height="4" fill="#FFD86B"/><rect x="52" y="32" width="24" height="4" fill="#FFD86B"/><rect x="48" y="36" width="32" height="4" fill="#FFD86B"/><rect x="48" y="40" width="32" height="4" fill="#FFD86B"/><rect x="52" y="44" width="24" height="4" fill="#FFD86B"/><rect x="56" y="48" width="16" height="4" fill="#FFD86B"/>
+                <rect x="54" y="34" width="8" height="8" fill="#FFF1E8"/><rect x="54" y="38" width="4" height="6" fill="#1D2B53"/><rect x="66" y="38" width="4" height="6" fill="#1D2B53"/><rect x="50" y="42" width="4" height="4" fill="#FFCCD5"/><rect x="70" y="42" width="4" height="4" fill="#FFCCD5"/><rect x="60" y="47" width="8" height="2" fill="#AB5236"/>
+              </svg>
+            </div>
+          </div>
+          <div style="text-align:center; margin:8px 0 12px;"><span style="font-family:var(--font-mono); font-size:12px; color:#5F5E5A;">Mochi · curious</span></div>
+          <div style="display:flex; justify-content:space-around; margin-bottom:16px;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-broadcast" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Broadcast</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-dice-5" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Arcade</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-terminal-2" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Craft</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-compass" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Quests</span></div>
+          </div>
+          <div style="display:flex; justify-content:center; gap:14px;">
+            <span style="font-size:12px; color:#7A2E1A; background:#F0997B; border:2px solid #D85A30; border-radius:14px; padding:5px 16px;">select</span>
+            <span style="font-size:12px; color:#04342C; background:#5DCAA5; border:2px solid #1D9E75; border-radius:14px; padding:5px 22px;">ok</span>
+            <span style="font-size:12px; color:#8A7350; background:#E7D6B2; border:2px solid #D8C293; border-radius:14px; padding:5px 16px;">back</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot">
+      <h2 class="cap">2 · Instant Messenger <span>— persistent icon frame, active icon highlighted, AIM-style buddy list</span></h2>
+      <div class="stage">
+        <div style="width:474px; background:#F3E6CF; border:3px solid #E2CDA6; border-radius:26px; padding:16px 20px 18px;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:14px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:#5DCAA5;"></span>
+            <span style="font-family:var(--font-mono); font-size:13px; letter-spacing:2px; color:#8A7350;">the relay</span>
+            <span style="width:8px; height:8px; border-radius:50%; background:#E8927C;"></span>
+          </div>
+          <div style="display:flex; justify-content:space-around; margin-bottom:12px;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-radio" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Relay</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-mail" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Mail</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px; background:#F0C9BD; border-radius:12px; padding:4px 0;"><i class="ti ti-users" style="font-size:24px; color:#993C1D;"></i><span style="font-size:11px; color:#993C1D;">Friends</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-user" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Profile</span></div>
+          </div>
+          <div style="display:flex; justify-content:center;">
+            <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:7px; width:272px;">
+              <div style="background:#E8EEDA; border-radius:4px; padding:6px 8px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #C2CFA0; padding-bottom:5px; margin-bottom:5px;">
+                  <span style="font-size:12px; font-weight:500; color:#2C3318;">Friends</span><span style="font-size:11px; color:#6B7355;">3 online</span>
+                </div>
+                <div style="font-size:11px; color:#6B7355; margin:2px 0 3px;">Online</div>
+                <div style="display:flex; align-items:center; gap:7px; padding:3px 6px;"><span style="width:8px; height:8px; border-radius:50%; background:#1D9E75;"></span><span style="font-size:12px; font-weight:500; color:#2C3318; width:118px;">Dad <span style="color:#9AA47E; font-size:11px;">·7c21</span></span><span style="font-size:11px; color:#6B7355; margin-left:auto;">raising a Beacon</span></div>
+                <div style="display:flex; align-items:center; gap:7px; padding:4px 6px; background:#1D9E75; border-radius:4px;"><span style="width:8px; height:8px; border-radius:50%; background:#D7F2E5;"></span><span style="font-size:12px; font-weight:500; color:#F3EAD2; width:118px;">PixelMoth <span style="color:#A9E0CC; font-size:11px;">·a3f9</span></span><span style="font-size:11px; color:#CFEFE0; margin-left:auto;">at the Arcade</span></div>
+                <div style="display:flex; align-items:center; gap:7px; padding:3px 6px;"><span style="width:8px; height:8px; border-radius:50%; background:#1D9E75;"></span><span style="font-size:12px; font-weight:500; color:#2C3318; width:118px;">Juno <span style="color:#9AA47E; font-size:11px;">·4b2e</span></span><span style="font-size:11px; color:#6B7355; margin-left:auto;">brb questing</span></div>
+                <div style="font-size:11px; color:#6B7355; margin:5px 0 3px;">Offline</div>
+                <div style="display:flex; align-items:center; gap:7px; padding:3px 6px;"><span style="width:8px; height:8px; border-radius:50%; border:1.5px solid #B4B2A9; box-sizing:border-box;"></span><span style="font-size:12px; color:#8A8C76; width:118px;">WonkyTanuki <span style="color:#B3B894; font-size:11px;">·9f01</span></span><span style="font-size:11px; color:#9AA47E; margin-left:auto;">seen 2h</span></div>
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; margin:8px 0 12px;"><span style="font-family:var(--font-mono); font-size:11px; color:#8A7350;">OK message · SELECT next · BACK home</span></div>
+          <div style="display:flex; justify-content:space-around; margin-bottom:16px;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-broadcast" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Broadcast</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-dice-5" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Arcade</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-terminal-2" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Craft</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-compass" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Quests</span></div>
+          </div>
+          <div style="display:flex; justify-content:center; gap:14px;">
+            <span style="font-size:12px; color:#7A2E1A; background:#F0997B; border:2px solid #D85A30; border-radius:14px; padding:5px 16px;">select</span>
+            <span style="font-size:12px; color:#04342C; background:#5DCAA5; border:2px solid #1D9E75; border-radius:14px; padding:5px 22px;">ok</span>
+            <span style="font-size:12px; color:#8A7350; background:#E7D6B2; border:2px solid #D8C293; border-radius:14px; padding:5px 16px;">back</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot">
+      <h2 class="cap">3 · Craft / Lua editor <span>— size-budget meter; on-screen keyboard takes the bottom row while editing</span></h2>
+      <div class="stage">
+        <div style="width:474px; background:#F3E6CF; border:3px solid #E2CDA6; border-radius:26px; padding:16px 20px 16px;">
+          <div style="display:flex; align-items:center; justify-content:center; gap:8px; margin-bottom:12px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:#5DCAA5;"></span>
+            <span style="font-family:var(--font-mono); font-size:13px; letter-spacing:2px; color:#8A7350;">the relay</span>
+            <span style="width:8px; height:8px; border-radius:50%; background:#E8927C;"></span>
+          </div>
+          <div style="display:flex; justify-content:space-around; margin-bottom:12px;">
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-radio" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Relay</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-mail" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Mail</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px;"><i class="ti ti-users" style="font-size:24px; color:#0F6E56;"></i><span style="font-size:11px; color:#8A7350;">Friends</span></div>
+            <div style="display:flex; flex-direction:column; align-items:center; gap:3px; width:72px; background:#F0C9BD; border-radius:12px; padding:4px 0;"><i class="ti ti-terminal-2" style="font-size:24px; color:#993C1D;"></i><span style="font-size:11px; color:#993C1D;">Craft</span></div>
+          </div>
+          <div style="display:flex; justify-content:center; margin-bottom:10px;">
+            <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:7px; width:300px;">
+              <div style="background:#E8EEDA; border-radius:4px; padding:5px 7px;">
+                <div style="display:flex; align-items:center; justify-content:space-between; border-bottom:2px solid #C2CFA0; padding-bottom:4px; margin-bottom:4px;">
+                  <span style="font-size:12px; font-weight:500; color:#2C3318;"><i class="ti ti-terminal-2" style="font-size:13px; vertical-align:-2px; margin-right:4px;"></i>pong.lua</span>
+                  <span style="display:flex; align-items:center; gap:6px;"><span style="width:56px; height:6px; background:#CDD8B0; border-radius:3px; overflow:hidden; display:inline-block;"><span style="display:block; width:15%; height:6px; background:#1D9E75;"></span></span><span style="font-size:11px; color:#6B7355;">1.2 / 8 KB</span></span>
+                </div>
+                <pre style="margin:0; font-family:var(--font-mono); font-size:12px; line-height:1.45; color:#2C3318; white-space:pre;"><span style="color:#9AA47E;"> 1</span>  <span style="color:#8A8C76;">-- pong · a relay cart</span>
+<span style="color:#9AA47E;"> 2</span>  <span style="color:#0F6E56;">local</span> ball = {x=<span style="color:#185FA5;">64</span>,y=<span style="color:#185FA5;">40</span>,dx=<span style="color:#185FA5;">1</span>}
+<span style="color:#9AA47E;"> 3</span>
+<span style="color:#9AA47E;"> 4</span>  <span style="color:#0F6E56;">function</span> <span style="color:#993C1D;">_update</span>()
+<span style="color:#9AA47E;"> 5</span>    ball.x = ball.x + ball.dx<span style="background:#1D9E75; color:#E8EEDA;">&nbsp;</span>
+<span style="color:#9AA47E;"> 6</span>  <span style="color:#0F6E56;">end</span>
+<span style="color:#9AA47E;"> 7</span>
+<span style="color:#9AA47E;"> 8</span>  <span style="color:#0F6E56;">function</span> <span style="color:#993C1D;">_draw</span>()
+<span style="color:#9AA47E;"> 9</span>    <span style="color:#B5731A;">cls</span>(<span style="color:#185FA5;">1</span>)  <span style="color:#B5731A;">spr</span>(<span style="color:#185FA5;">2</span>, ball.x, ball.y)
+<span style="color:#9AA47E;">10</span>  <span style="color:#0F6E56;">end</span></pre>
+              </div>
+            </div>
+          </div>
+          <div style="text-align:center; margin-bottom:8px;"><span style="font-family:var(--font-mono); font-size:11px; color:#8A7350;">OK type · SELECT key · ▶ run · BACK menu</span></div>
+          <div style="background:#EADCBE; border-radius:10px; padding:6px 6px 7px;">
+            <div style="display:flex; justify-content:center; gap:4px; margin-bottom:4px;">
+              <span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">q</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">w</span><span style="font-size:12px; color:#E8EEDA; background:#1D9E75; border:1px solid #0F6E56; border-radius:4px; padding:5px 0; width:36px; text-align:center;">e</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">r</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">t</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">y</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">u</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">i</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">o</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">p</span>
+            </div>
+            <div style="display:flex; justify-content:center; gap:4px; margin-bottom:4px;">
+              <span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">a</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">s</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">d</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">f</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">g</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">h</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">j</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">k</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">l</span>
+            </div>
+            <div style="display:flex; justify-content:center; gap:4px;">
+              <span style="font-size:12px; color:#5F5E5A; background:#E7D6B2; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:46px; text-align:center;">⇧</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">z</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">x</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">c</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">v</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">b</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">n</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:36px; text-align:center;">m</span><span style="font-size:12px; color:#5F5E5A; background:#E7D6B2; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:46px; text-align:center;">⌫</span>
+            </div>
+            <div style="display:flex; justify-content:center; gap:4px; margin-top:4px;">
+              <span style="font-size:11px; color:#5F5E5A; background:#E7D6B2; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:46px; text-align:center;">123</span><span style="font-size:12px; color:#5F5E5A; background:#F5ECD6; border:1px solid #D8C293; border-radius:4px; padding:5px 0; width:200px; text-align:center;">space</span><span style="font-size:12px; color:#04342C; background:#5DCAA5; border:1px solid #1D9E75; border-radius:4px; padding:5px 0; width:46px; text-align:center;">↵</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="shot">
+      <h2 class="cap">4 · Onboarding <span>— create identity (no reset) · connect a node · hatch the Flicker</span></h2>
+      <div class="stage"><div class="col">
+
+        <div style="width:392px; background:#F3E6CF; border:3px solid #E2CDA6; border-radius:24px; padding:16px 20px 16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"><span style="font-size:11px; color:#8A7350;">step 1 of 3</span><span style="font-size:13px; letter-spacing:2px; color:#8A7350;">enter the relay</span></div>
+          <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:8px;">
+            <div style="background:#E8EEDA; border-radius:4px; padding:10px 11px;">
+              <div style="margin-bottom:9px;"><div style="font-size:11px; color:#6B7355; margin-bottom:3px;">Handle</div><div style="font-size:13px; color:#2C3318; background:#FBF7EA; border:1px solid #C2CFA0; border-radius:4px; padding:6px 8px;">WonkyTanuki</div></div>
+              <div style="margin-bottom:7px;"><div style="font-size:11px; color:#6B7355; margin-bottom:3px;">Password</div><div style="font-size:13px; color:#2C3318; background:#FBF7EA; border:1px solid #C2CFA0; border-radius:4px; padding:6px 8px; display:flex; justify-content:space-between;"><span>••••••••••</span><span style="color:#1D9E75; font-size:11px;">strong</span></div><div style="height:5px; background:#CDD8B0; border-radius:3px; margin-top:5px; overflow:hidden;"><div style="width:82%; height:5px; background:#1D9E75;"></div></div></div>
+              <div style="display:flex; gap:7px; align-items:flex-start; background:#FAE3DC; border:1px solid #E8927C; border-radius:6px; padding:7px 8px;"><i class="ti ti-lock" style="font-size:15px; color:#993C1D; margin-top:1px;"></i><span style="font-size:11px; color:#993C1D; line-height:1.45;">Your password <span style="font-weight:500;">is</span> your key. There is no reset and no recovery — write it down.</span></div>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:10px;"><span style="font-size:12px; color:#04342C; background:#5DCAA5; border:2px solid #1D9E75; border-radius:14px; padding:5px 20px;">next ›</span></div>
+        </div>
+
+        <i class="ti ti-chevron-down" style="font-size:18px; color:#C2A87E;"></i>
+
+        <div style="width:392px; background:#F3E6CF; border:3px solid #E2CDA6; border-radius:24px; padding:16px 20px 16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"><span style="font-size:11px; color:#8A7350;">step 2 of 3</span><span style="font-size:13px; letter-spacing:2px; color:#8A7350;">connect the mesh</span></div>
+          <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:8px;">
+            <div style="background:#E8EEDA; border-radius:4px; padding:10px 11px;">
+              <div style="font-size:11px; color:#6B7355; margin-bottom:3px;">Node address</div>
+              <div style="font-size:13px; color:#2C3318; background:#FBF7EA; border:1px solid #C2CFA0; border-radius:4px; padding:6px 8px; margin-bottom:9px;">http://192.168.1.50</div>
+              <div style="display:flex; align-items:center; gap:8px; margin-bottom:9px;"><span style="flex:1; height:1px; background:#C2CFA0;"></span><span style="font-size:11px; color:#9AA47E;">or pair</span><span style="flex:1; height:1px; background:#C2CFA0;"></span></div>
+              <div style="display:flex; gap:8px; margin-bottom:9px;"><span style="flex:1; text-align:center; font-size:12px; color:#0F6E56; background:#FBF7EA; border:1px solid #C2CFA0; border-radius:6px; padding:7px 0;"><i class="ti ti-bluetooth" style="font-size:14px; vertical-align:-2px; margin-right:4px;"></i>Bluetooth</span><span style="flex:1; text-align:center; font-size:12px; color:#0F6E56; background:#FBF7EA; border:1px solid #C2CFA0; border-radius:6px; padding:7px 0;"><i class="ti ti-usb" style="font-size:14px; vertical-align:-2px; margin-right:4px;"></i>USB</span></div>
+              <div style="font-size:11px; color:#9AA47E; text-align:center;">You'll trust the node's certificate once.</div>
+            </div>
+          </div>
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px;"><span style="font-size:11px; color:#8A7350; text-decoration:underline;">skip — explore offline</span><span style="font-size:12px; color:#04342C; background:#5DCAA5; border:2px solid #1D9E75; border-radius:14px; padding:5px 18px;">connect ›</span></div>
+        </div>
+
+        <i class="ti ti-chevron-down" style="font-size:18px; color:#C2A87E;"></i>
+
+        <div style="width:392px; background:#F3E6CF; border:3px solid #E2CDA6; border-radius:24px; padding:16px 20px 16px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;"><span style="font-size:11px; color:#8A7350;">step 3 of 3</span><span style="font-size:13px; letter-spacing:2px; color:#8A7350;">a light awakens</span></div>
+          <div style="display:flex; justify-content:center;">
+            <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:8px; width:300px;">
+              <svg viewBox="0 0 128 80" width="284" height="120" style="display:block; image-rendering:pixelated; border-radius:4px;">
+                <rect x="0" y="0" width="128" height="80" fill="#15171D"/>
+                <rect x="26" y="20" width="2" height="2" fill="#3A3F4A"/><rect x="98" y="16" width="2" height="2" fill="#3A3F4A"/><rect x="40" y="58" width="2" height="2" fill="#3A3F4A"/><rect x="92" y="60" width="2" height="2" fill="#3A3F4A"/>
+                <rect x="60" y="30" width="8" height="4" fill="#4A4D55"/><rect x="56" y="34" width="16" height="4" fill="#6E7079"/><rect x="56" y="38" width="16" height="4" fill="#9A9CA3"/><rect x="58" y="42" width="12" height="4" fill="#6E7079"/><rect x="60" y="46" width="8" height="4" fill="#4A4D55"/>
+                <rect x="60" y="36" width="3" height="3" fill="#1D2B53"/><rect x="66" y="36" width="3" height="3" fill="#1D2B53"/>
+                <rect x="62" y="24" width="3" height="4" fill="#C2C3C7"/><rect x="44" y="40" width="2" height="2" fill="#3A3F4A"/><rect x="82" y="40" width="2" height="2" fill="#3A3F4A"/>
+              </svg>
+            </div>
+          </div>
+          <div style="text-align:center; margin:9px 0 9px;"><span style="font-size:11px; color:#8A7350;">A Flicker stirs from the drift.</span></div>
+          <div style="background:#3A3F2A; border:3px solid #C9D49B; border-radius:12px; padding:6px;">
+            <div style="background:#E8EEDA; border-radius:4px; padding:8px 10px;"><div style="font-size:11px; color:#6B7355; margin-bottom:3px;">Name your Wisp</div><div style="font-size:13px; color:#2C3318; background:#FBF7EA; border:1px solid #C2CFA0; border-radius:4px; padding:6px 8px;">Mochi</div></div>
+          </div>
+          <div style="display:flex; justify-content:flex-end; margin-top:10px;"><span style="font-size:12px; color:#04342C; background:#5DCAA5; border:2px solid #1D9E75; border-radius:14px; padding:5px 22px;">begin ✦</span></div>
+        </div>
+
+      </div></div>
+    </section>
+
+  </div>
+
+  <p class="foot">the relay · screen gallery v1 · generated 2026-06-19</p>
+</div>
+</body>
+</html>

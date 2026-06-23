@@ -1,0 +1,218 @@
+/* ZyPico — Tamagotchi-style shell with an early-2000s, candy-bright register
+   (outline §13). The screen is one LCD plate: vector icons framing a 128×80
+   chunky dot matrix; three buttons below. */
+
+:root {
+  /* Y2K brights — saturated, glossy, less muted than the original cream. */
+  --bg1: #21d4fd; /* cyan */
+  --bg2: #b721ff; /* electric purple */
+  --bg3: #2af598; /* lime accent */
+
+  --shell-1: #ffffff;
+  --shell-2: #cfe9ff;
+  --shell-edge: #1f8fff;
+
+  --lcd: #c7d8b5; /* pale LCD plate (greenish) */
+  --lcd-edge: #6f8a5e;
+  --lcd-ink: #243a1c; /* dark icon ink on the LCD */
+
+  --active: #ff2d7e; /* hot pink selector */
+  --accent-blue: #1f8fff;
+  --accent-green: #18c964;
+  --accent-red: #ff3b5c;
+
+  --ink: #16242b;
+  --font: ui-monospace, "SF Mono", "DejaVu Sans Mono", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root { height: 100%; margin: 0; }
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  overflow: hidden; /* the gadget scales to fit, so the page never scrolls */
+  background:
+    radial-gradient(circle at 18% 12%, rgba(255, 255, 255, 0.55), transparent 40%),
+    linear-gradient(135deg, var(--bg1) 0%, var(--bg2) 70%, var(--bg3) 130%);
+  background-attachment: fixed;
+}
+
+/* Full-viewport stage that centers and clips the scaled gadget. */
+.stage {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh; /* honors mobile browser chrome */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+/* The gadget at its true design size; App applies a uniform scale to fit. */
+.device {
+  width: 448px;
+  flex: 0 0 auto;
+  transform-origin: center center;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wordmark {
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 2px;
+  text-align: center;
+  color: #fff;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25), 0 0 12px rgba(255, 255, 255, 0.4);
+}
+
+/* The bright glossy shell holding the LCD. */
+.shell {
+  background: linear-gradient(180deg, var(--shell-1) 0%, var(--shell-2) 100%);
+  border: 3px solid var(--shell-edge);
+  border-radius: 26px;
+  padding: 16px;
+  box-shadow:
+    inset 0 2px 6px rgba(255, 255, 255, 0.9),
+    inset 0 -6px 14px rgba(31, 143, 255, 0.18),
+    0 10px 0 rgba(31, 143, 255, 0.35),
+    0 14px 30px rgba(0, 0, 0, 0.3);
+}
+
+/* The LCD plate: icons + matrix, one continuous screen. */
+.lcd {
+  background: linear-gradient(180deg, #d6e3c8 0%, var(--lcd) 100%);
+  border: 3px solid var(--lcd-edge);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  box-shadow: inset 0 0 12px rgba(60, 80, 40, 0.35);
+}
+
+.icon-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.place-icon {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1 / 1;
+  max-height: 42px;
+  border: 2px solid transparent;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.18);
+  color: var(--lcd-ink);
+  cursor: pointer;
+  padding: 6px;
+  transition: transform 0.08s ease, background 0.1s ease;
+}
+.place-icon svg { width: 100%; height: 100%; }
+.place-icon:hover { background: rgba(255, 255, 255, 0.45); }
+.place-icon:active { transform: translateY(1px); }
+.place-icon.active {
+  background: var(--active);
+  border-color: #fff;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(255, 45, 126, 0.7);
+}
+
+/* The 128×80 dot matrix — fixed at a 3× integer scale (384×240) so it is a
+   stable, crisp, chunky gadget screen that never reflows with content. The
+   canvas is absolutely positioned so its intrinsic size can't perturb layout. */
+.matrix {
+  position: relative;
+  width: 384px;
+  height: 240px;
+  max-width: 100%;
+  margin: 0 auto;
+  background: #0b1020;
+  border-radius: 5px;
+  overflow: hidden;
+  border: 2px solid #050810;
+  box-shadow: inset 0 0 0 2px rgba(0, 0, 0, 0.55);
+}
+.matrix > canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+/* The three buttons. */
+.buttons {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+.btn3 {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  color: #fff;
+  border: none;
+  border-radius: 14px;
+  padding: 10px 6px;
+  cursor: pointer;
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.45), 0 4px 0 rgba(0, 0, 0, 0.22);
+  transition: transform 0.06s ease, box-shadow 0.06s ease;
+}
+.btn3 .btn3-glyph { font-size: 16px; line-height: 1; }
+.btn3:active { transform: translateY(3px); box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.45); }
+.btn3.select { background: linear-gradient(180deg, #54c4ff, var(--accent-blue)); }
+.btn3.accept { background: linear-gradient(180deg, #4be39a, var(--accent-green)); }
+.btn3.cancel { background: linear-gradient(180deg, #ff6f86, var(--accent-red)); }
+
+/* On-screen QWERTY — page chrome below the buttons, not on the LCD. */
+.keyboard {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 8px;
+  border-radius: 16px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transition: opacity 0.15s ease;
+}
+.keyboard.idle { opacity: 0.4; }
+.kb-row { display: flex; gap: 5px; justify-content: center; }
+.kb-key {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding: 9px 0;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff, #dceaff);
+  box-shadow: 0 2px 0 rgba(31, 143, 255, 0.35);
+  cursor: pointer;
+}
+.kb-key:active { transform: translateY(2px); box-shadow: none; }
+.kb-key.wide { flex: 1.4; }
+.kb-key.space { flex: 3; letter-spacing: 2px; }
+.kb-key.enter { background: linear-gradient(180deg, #4be39a, var(--accent-green)); color: #fff; }
+.keyboard.idle .kb-key { cursor: default; }
+
+.footer-verbs {
+  text-align: center;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: rgba(255, 255, 255, 0.92);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}

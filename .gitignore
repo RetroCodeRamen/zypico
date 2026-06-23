@@ -1,0 +1,19 @@
+node_modules/
+dist/
+dev-dist/
+*.local
+.DS_Store
+.vite/
+coverage/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# PlatformIO build output + generated web bundle (copied from dist on build)
+firmware/heltec-v3/.pio/
+firmware/heltec-v3/data/
+
+# Android (legacy) build artifacts — should never be committed
+native/**/build/
+native/**/.gradle/
+native/**/local.properties
