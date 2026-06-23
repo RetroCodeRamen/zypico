@@ -43,12 +43,6 @@ export default defineConfig({
       "@transport": fileURLToPath(new URL("./src/transport", import.meta.url)),
       "@ui": fileURLToPath(new URL("./src/ui", import.meta.url)),
       "@app": fileURLToPath(new URL("./src/app", import.meta.url)),
-      // @meshtastic/core bundles a logger that imports these Node built-ins at
-      // load time. They never run in the browser; point them at tiny shims so
-      // the production bundle resolves (see src/shims/node/*).
-      os: fileURLToPath(new URL("./src/shims/node/os.ts", import.meta.url)),
-      path: fileURLToPath(new URL("./src/shims/node/path.ts", import.meta.url)),
-      util: fileURLToPath(new URL("./src/shims/node/util.ts", import.meta.url)),
     },
   },
   server: {
