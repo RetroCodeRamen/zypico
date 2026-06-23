@@ -1,11 +1,16 @@
 export {
   decodeFrame,
+  decrementHop,
+  DEFAULT_HOPS,
   encodeFrame,
+  HEADER_LEN,
+  peekEnvelope,
   PROTOCOL_MAJOR,
   PROTOCOL_MINOR,
   SIG_LEN,
   type DecodeResult,
   type EncodeOptions,
+  type FrameEnvelope,
   type ProtocolVersion,
   type RelayFrame,
 } from "./frame.ts";

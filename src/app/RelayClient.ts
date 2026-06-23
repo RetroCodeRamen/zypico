@@ -10,10 +10,14 @@ import {
   AirtimeGovernor,
   DedupeCache,
   decodeFrame,
+  decrementHop,
+  DEFAULT_HOPS,
   encodeFrame,
+  FRAG_HEADER_LEN,
   fragmentToFrames,
-  frameKey,
+  HEADER_LEN,
   MODEM_PRESETS,
+  peekEnvelope,
   Priority,
   Reassembler,
   SubType,
@@ -26,11 +30,11 @@ import {
   type TransportStatus,
 } from "@transport/index.ts";
 
-// Conservative on-air budget (outline §11.1: ≤180 B working). A frame is the
-// 3-byte header plus its payload, so the payload we hand to encodeFrame caps at
-// 177; fragmentation chunks inside that again (see protocol/fragment.ts).
+// Conservative on-air budget (outline §11.1: ≤180 B working). A fragment goes on
+// air as the common header + the fragment header + a chunk, so each chunk must
+// leave room for both or a fragmented transfer would overflow one transmission.
 const MAX_ONAIR = 180;
-const MAX_FRAME_PAYLOAD = MAX_ONAIR - 3;
+const MAX_FRAME_PAYLOAD = MAX_ONAIR - HEADER_LEN - FRAG_HEADER_LEN;
 
 /** A decoded inbound frame, for higher layers (presence, DM) to interpret. */
 export interface InboundDecoded {
@@ -38,6 +42,8 @@ export interface InboundDecoded {
   subtype: SubType;
   payload: Uint8Array;
   at: Date;
+  /** Hops travelled to reach us: 0 = heard directly (Nearby), ≥1 = via the Relay. */
+  hops: number;
 }
 
 interface SendMeta {
@@ -85,7 +91,10 @@ export class RelayClient {
 
   /** Broadcast an arbitrary typed frame (e.g. PRESENCE, IM/DM). */
   send(subtype: SubType, payload: Uint8Array, priority: Priority = Priority.INTERACTIVE): void {
-    this.enqueueFrame(encodeFrame(subtype, payload), { destination: "broadcast", wantAck: false }, priority);
+    const msgId = (Math.random() * 0x1_0000_0000) >>> 0;
+    // Record our own id so the frame's mesh echo (and our repeat of it) dedupes.
+    this.dedupe.check(String(msgId));
+    this.enqueueFrame(encodeFrame(subtype, payload, { msgId }), { destination: "broadcast", wantAck: false }, priority);
   }
 
   async connect(): Promise<void> {
@@ -136,9 +145,21 @@ export class RelayClient {
   }
 
   private handleInbound(f: InboundFrame): void {
-    // Dedupe at the radio-envelope level before any work (plan §5).
-    if (!this.dedupe.check(frameKey(f.from, f.packetId))) return;
+    // Network-wide dedupe on the stable msg id (it survives every hop), before
+    // any work — a flood reaches us by many paths and our repeats echo back.
+    const env = peekEnvelope(f.payload);
+    if (!env) return; // too short / future major — not ours to handle
+    if (!this.dedupe.check(String(env.msgId))) return;
 
+    // Multi-hop repeat (DESIGN §4.3): rebroadcast onward with one less hop,
+    // before consuming — so range extends even for sub-types we can't decode.
+    // The dedupe above guarantees we never repeat the same frame twice or loop.
+    if (env.hopLimit > 1) {
+      this.governor.enqueue(decrementHop(f.payload), { priority: Priority.BULK, meta: { destination: "broadcast", wantAck: false } });
+      this.pump();
+    }
+
+    const hops = Math.max(0, DEFAULT_HOPS - env.hopLimit);
     const res = decodeFrame(f.payload);
     if (!res.ok) return; // unknown sub-type / incompatible version — skip
 
@@ -146,9 +167,9 @@ export class RelayClient {
       const result = this.reassembler.accept(res.frame.payload);
       if (result.status !== "complete") return;
       const inner = decodeFrame(result.data);
-      if (inner.ok) this.inbound.emit({ from: f.from, subtype: inner.frame.subtype, payload: inner.frame.payload, at: f.rxTime });
+      if (inner.ok) this.inbound.emit({ from: f.from, subtype: inner.frame.subtype, payload: inner.frame.payload, at: f.rxTime, hops });
       return;
     }
-    this.inbound.emit({ from: f.from, subtype: res.frame.subtype, payload: res.frame.payload, at: f.rxTime });
+    this.inbound.emit({ from: f.from, subtype: res.frame.subtype, payload: res.frame.payload, at: f.rxTime, hops });
   }
 }
