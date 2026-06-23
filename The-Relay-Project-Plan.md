@@ -50,7 +50,18 @@ Web Bluetooth, HTTP-to-node) were removed in the cleanup — see git history / A
   reachability-gated**: a DM to an unreachable Traveler offers Mail instead (never
   silent). Commons history ~10. _Mail store-and-forward between Stations lands in M7._
 
-**Next:** **M7 — Stations** (Station Mode on Heltec: admin login, Mail relay/store-and-forward, Page hosting, Account Vaults, Commons memory to ~50). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults need it.
+- **M7 — Stations (done 2026-06-23).** The Station runs as a persistent **Node
+  daemon** wired to a Heltec over USB (`tools/station/`), reusing the real
+  `RelayClient` — the tractable "full Station" path. It provides: signed
+  **beacons + discovery** (the Wisp hears about Stations; in-app via Commons →
+  Stations); **Mail store-and-forward** (held → forwarded on presence → acked →
+  dropped); **Page hosting** (serve a page while its owner is offline); **Commons
+  memory** (~50, backfilled to arrivers); **encrypted Account Vaults** (opaque
+  ciphertext; sealed-to-self). Admin = the Station's separate name+password +
+  `ZYPICO_STATION_SERVICES`. Every slice verified over real LoRa (`tools/harness/`).
+  _Heltec firmware Station Mode (autonomous, no host) remains a later optimization._
+
+**Next:** **M8 — Making + the Exchange** (Lua Cart runtime + sandbox; authoring; the Exchange). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults need it.
 
 **Design status:** the spec is build-ready. Identity/crypto, transport/mesh, companion model, sandbox, and the visual system are all decided. Four screens are designed and the surface grammar is proven. Remaining unknowns are best resolved during implementation, not further outlining.
 
