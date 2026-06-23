@@ -5,7 +5,7 @@ import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
 import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
-import type { EditView, MoodSummary, PageView } from "@ui/scenes/render.ts";
+import type { EditView, MoodSummary, PageView, PostView } from "@ui/scenes/render.ts";
 import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
 } from "@core/companion/index.ts";
@@ -20,6 +20,7 @@ import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
 import { usePages } from "@ui/hooks/usePages.ts";
 import { usePageExchange } from "@ui/hooks/usePageExchange.ts";
+import { usePostOffice } from "@ui/hooks/usePostOffice.ts";
 
 // Hearts are earned through participation, never picked at will (DESIGN §2) —
 // real activity hooks grant them. CAN_RAISE now only gates a dev-only RESET in
@@ -73,12 +74,18 @@ export function App() {
   const [pageView, setPageView] = useState<PageView | null>(null);
   const pageExchange = usePageExchange(identity, link, () => myPage);
 
+  // The Post: Mail (compose/outbox/inbox), delivered when recipients are reachable.
+  const reachableFps = social.nearby.filter((n) => Date.now() - n.lastSeen < 300_000).map((n) => n.fingerprint);
+  const postOffice = usePostOffice(identity, link, social.resolvePubkey, reachableFps);
+  const [postView, setPostView] = useState<PostView | null>(null);
+
   // Reached at login (after identity is derived, before the gate lifts).
   postAuthRef.current = (id: Identity) => {
     loadCompanion(id.fingerprint);
     social.load(id.fingerprint);
     loadPages(id.fingerprint);
     pageExchange.loadGuests(id.fingerprint);
+    postOffice.load(id.fingerprint);
     void link.connectBoard(true); // always-on link to the board, no manual step
   };
 
@@ -108,6 +115,9 @@ export function App() {
   // Reachable Travelers = heard within the 5-min window (DESIGN §4.2). Stale
   // beacons drop off so the world reflects who's actually around.
   const reachable = social.nearby.filter((n) => Date.now() - n.lastSeen < 300_000);
+
+  // Buddies you can compose Mail to (mail waits in the outbox until they're reachable).
+  const mailPick = social.buddies.map((b) => ({ handle: b.petname ?? b.handle, fingerprint: b.fingerprint }));
 
   // Travelers whose page we can fetch right now: buddies + reachable (deduped).
   const pageBrowse: { handle: string; fingerprint: string }[] = [
@@ -238,6 +248,33 @@ export function App() {
       return;
     }
 
+    // THE POST overlay: read mail, pick a recipient + compose, browse the outbox.
+    if (postView) {
+      if (postView.panel === "inbox") {
+        const shown = [...postOffice.inbox].reverse().slice(0, 8);
+        if (action === "select") setPostView({ panel: "inbox", cursor: shown.length ? (postView.cursor + 1) % shown.length : 0 });
+        else if (action === "accept") {
+          const it = shown[postView.cursor];
+          if (it) { postOffice.markRead(it.id); setPostView({ panel: "read", cursor: 0, id: it.id }); }
+        } else if (action === "cancel") { setPostView(null); navDispatch("cancel"); }
+      } else if (postView.panel === "pick") {
+        if (action === "select") setPostView({ panel: "pick", cursor: mailPick.length ? (postView.cursor + 1) % mailPick.length : 0 });
+        else if (action === "accept") {
+          const it = mailPick[postView.cursor];
+          if (it) setEditing({
+            label: `MAIL ${it.handle}`.slice(0, 18), value: "",
+            onSubmit: (v) => { postOffice.compose(it.fingerprint, it.handle, v); setPostView({ panel: "outbox", cursor: 0 }); },
+          });
+        } else if (action === "cancel") { setPostView(null); navDispatch("cancel"); }
+      } else { // read / outbox — view only
+        if (action === "cancel") {
+          if (postView.panel === "read") setPostView({ panel: "inbox", cursor: 0 });
+          else { setPostView(null); navDispatch("cancel"); }
+        }
+      }
+      return;
+    }
+
     // TRAVELERS place: buddy list (add nearby / open DM) and DM threads.
     if (inFriends) {
       if (friendsThread) {
@@ -297,6 +334,13 @@ export function App() {
       if (place.id === "pages" && item === "GUESTBOOK") {
         sfx("accept");
         setPageView({ panel: "guestbook", cursor: 0 });
+        return;
+      }
+      if (place.id === "post") {
+        sfx("accept");
+        if (item === "INBOX") setPostView({ panel: "inbox", cursor: 0 });
+        else if (item === "COMPOSE") setPostView({ panel: "pick", cursor: 0 });
+        else if (item === "OUTBOX") setPostView({ panel: "outbox", cursor: 0 });
         return;
       }
       if (place.id === "profile") {
@@ -390,6 +434,12 @@ export function App() {
               : pageView.panel === "browse"
                 ? "SELECT move · ACCEPT view · CANCEL back"
                 : "SELECT move · ACCEPT edit · CANCEL back"
+        : postView
+          ? postView.panel === "read" || postView.panel === "outbox"
+            ? "CANCEL back"
+            : postView.panel === "pick"
+              ? "SELECT move · ACCEPT write · CANCEL back"
+              : "SELECT move · ACCEPT read · CANCEL back"
         : inFriends && friendsThread
           ? "ACCEPT write · CANCEL back"
           : inFriends
@@ -414,6 +464,8 @@ export function App() {
                 wispMood, discoveries: social.discoveries, sighting,
                 pageView, myPage, pageBrowse, myGuestbook: pageExchange.myGuestbook,
                 pageViewed: pageView?.panel === "view" && pageView.fp ? pageExchange.pages[pageView.fp] ?? null : null,
+                postView, inbox: postOffice.inbox, outbox: postOffice.outbox, mailPick,
+                mailRead: postView?.panel === "read" && postView.id != null ? postOffice.inbox.find((m) => m.id === postView.id) ?? null : null,
                 nearbyCount: reachable.length,
                 friends: inFriends
                   ? {
@@ -440,6 +492,7 @@ export function App() {
                 // The Wisp icon opens its care surface; others clear both overlays.
                 setWispView(PLACES[index].id === "wisp" ? { panel: "care", cursor: 0 } : null);
                 setPageView(null);
+                setPostView(null);
                 navDispatch({ type: "goto", index });
               }}
             />

@@ -198,5 +198,5 @@ export function useSocial(
     setRoomMsgs(room);
   };
 
-  return { buddies, nearby, dmThreads, roomMsgs, discoveries, addBuddy, sendRoom, sendDM, load };
+  return { buddies, nearby, dmThreads, roomMsgs, discoveries, resolvePubkey, addBuddy, sendRoom, sendDM, load };
 }

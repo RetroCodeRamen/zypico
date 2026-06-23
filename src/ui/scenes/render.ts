@@ -24,6 +24,7 @@ import {
 import type { Discovery } from "@app/storage/discoveries.ts";
 import type { TravelerPage } from "@app/storage/page.ts";
 import type { GuestEntry } from "@app/storage/guestbook.ts";
+import type { InboxMail, OutboxMail } from "@app/storage/mail.ts";
 import type { PageMsg } from "@core/protocol/index.ts";
 import { LOGO, LOGO_H, LOGO_TRANSPARENT, LOGO_W } from "@ui/pixel/logoBitmap.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
@@ -82,6 +83,14 @@ export interface PageView {
   cursor: number;
   /** Whose page is open (panel "view"). */
   fp?: string;
+}
+
+/** The POST place overlay: read mail, pick a recipient to compose, or browse the
+ * outbox. `id` selects the open inbox mail (panel "read"). */
+export interface PostView {
+  panel: "inbox" | "read" | "pick" | "outbox";
+  cursor: number;
+  id?: number;
 }
 
 /** Settled mood summary handed to the renderer (kept pure — App owns the clock). */
@@ -164,6 +173,14 @@ export interface ScreenModel {
   pageViewed: PageMsg | null;
   /** Guestbook entries left for you (PAGES → guestbook). */
   myGuestbook: GuestEntry[];
+  /** THE POST overlay + its data, when open. */
+  postView: PostView | null;
+  inbox: InboxMail[];
+  outbox: OutboxMail[];
+  /** Buddies you can compose mail to (POST → compose). */
+  mailPick: { handle: string; fingerprint: string }[];
+  /** The inbox mail being read (POST → read), or null. */
+  mailRead: InboxMail | null;
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
   /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
@@ -600,6 +617,78 @@ export function drawPageGuestbook(buf: PixelBuffer, entries: GuestEntry[]): void
   drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
 }
 
+/** THE POST → INBOX: received mail (newest first), unread marked. */
+export function drawMailInbox(buf: PixelBuffer, inbox: InboxMail[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "INBOX", C.title);
+  divider(buf, 9);
+  if (inbox.length === 0) {
+    drawTextCentered(buf, 34, "NO MAIL YET", C.dim);
+  } else {
+    const maxChars = Math.floor((buf.width - 10) / CELL_W);
+    [...inbox].reverse().slice(0, 8).forEach((m, i) => {
+      const y = 13 + i * 7;
+      const hi = i === cursor;
+      if (hi) drawText(buf, 1, y, ">", C.cursor);
+      if (!m.read) drawText(buf, 7, y, "*", C.ok);
+      drawText(buf, 12, y, `${m.handle}: ${m.text}`.toUpperCase().slice(0, maxChars), hi ? C.textHi : m.read ? C.text : C.ok);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT READ  CANCEL BACK", C.dim);
+}
+
+/** THE POST → READ: one mail, full text. */
+export function drawMailRead(buf: PixelBuffer, mail: InboxMail | null): void {
+  buf.clear(C.bg);
+  if (!mail) { drawTextCentered(buf, 34, "MAIL GONE", C.dim); return; }
+  drawText(buf, 3, 2, `FROM ${mail.handle}`.toUpperCase().slice(0, 18), C.title);
+  divider(buf, 9);
+  wrapText(mail.text, Math.floor((buf.width - 6) / CELL_W)).slice(0, 7)
+    .forEach((ln, i) => drawText(buf, 3, 16 + i * 7, ln, C.text));
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
+}
+
+/** THE POST → COMPOSE: pick who to write to (your buddies). */
+export function drawMailPick(buf: PixelBuffer, list: { handle: string }[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "MAIL TO", C.title);
+  divider(buf, 9);
+  if (list.length === 0) {
+    drawTextCentered(buf, 30, "NO BUDDIES YET", C.dim);
+    drawTextCentered(buf, 40, "ADD ONE IN TRAVELERS", C.dim);
+  } else {
+    list.slice(0, 8).forEach((it, i) => {
+      const y = 13 + i * 7;
+      const hi = i === cursor;
+      if (hi) drawText(buf, 1, y, ">", C.cursor);
+      drawText(buf, 7, y, it.handle.toUpperCase().slice(0, 20), hi ? C.textHi : C.text);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
+}
+
+/** THE POST → OUTBOX: queued mail; ✓ delivered, … still waiting for a Station/peer. */
+export function drawMailOutbox(buf: PixelBuffer, outbox: OutboxMail[]): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "OUTBOX", C.title);
+  divider(buf, 9);
+  if (outbox.length === 0) {
+    drawTextCentered(buf, 34, "NOTHING QUEUED", C.dim);
+  } else {
+    const maxChars = Math.floor((buf.width - 14) / CELL_W);
+    [...outbox].reverse().slice(0, 8).forEach((m, i) => {
+      const y = 13 + i * 7;
+      drawText(buf, 2, y, m.delivered ? "OK" : "..", m.delivered ? C.ok : C.warn);
+      drawText(buf, 16, y, `${m.handle}: ${m.text}`.toUpperCase().slice(0, maxChars), C.text);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
+}
+
 /** FRIENDS — buddy list (added first, then nearby with an ADD hint). */
 export function drawFriends(buf: PixelBuffer, v: FriendsView): void {
   if (v.thread) {
@@ -685,6 +774,13 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     else if (model.pageView.panel === "view") drawPageView(buf, model.pageViewed);
     else if (model.pageView.panel === "guestbook") drawPageGuestbook(buf, model.myGuestbook);
     else drawPageMine(buf, model.myPage, model.pageView);
+    return;
+  }
+  if (model.postView) {
+    if (model.postView.panel === "read") drawMailRead(buf, model.mailRead);
+    else if (model.postView.panel === "pick") drawMailPick(buf, model.mailPick, model.postView.cursor);
+    else if (model.postView.panel === "outbox") drawMailOutbox(buf, model.outbox);
+    else drawMailInbox(buf, model.inbox, model.postView.cursor);
     return;
   }
   const { nav } = model;
