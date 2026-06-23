@@ -78,6 +78,10 @@ static uint32_t peerIds[MAX_PEERS];
 static uint32_t peerLastMs[MAX_PEERS];
 static int peerCount = 0;
 
+// RSSI of the most recently heard packet (for the OLED, e.g. walk tests).
+static int lastRssi = 0;
+static uint32_t lastRssiMs = 0; // 0 = nothing heard yet
+
 struct TxMsg {
   uint8_t len;
   uint8_t data[MAX_PAYLOAD];
@@ -199,18 +203,23 @@ static void drawSplashOled() {
 // Info screen: no wordmark (the splash brands the device); status + how many
 // ZyPico devices are in radio range right now.
 static void drawInfo() {
-  char line[28];
+  char line[32];
   oled.clearBuffer();
   oled.setFont(u8g2_font_5x8_tr);
-  oled.drawStr(2, 10, "AP:");
-  oled.drawStr(22, 10, apSsid);
-  snprintf(line, sizeof(line), "node !%x", nodeId);
-  oled.drawStr(2, 22, line);
-  oled.drawStr(2, 34, "915 MHz");
-  oled.drawLine(0, 40, 127, 40);
+  oled.drawStr(2, 9, "AP:");
+  oled.drawStr(22, 9, apSsid);
+  snprintf(line, sizeof(line), "node !%x  915MHz", nodeId);
+  oled.drawStr(2, 19, line);
+  oled.drawLine(0, 24, 127, 24);
   oled.setFont(u8g2_font_6x12_tr);
   snprintf(line, sizeof(line), "In range: %d", peersInRange());
-  oled.drawStr(2, 56, line);
+  oled.drawStr(2, 38, line);
+  if (lastRssiMs == 0) {
+    oled.drawStr(2, 54, "RSSI: --");
+  } else {
+    snprintf(line, sizeof(line), "RSSI %d dBm %lus", lastRssi, (unsigned long)((millis() - lastRssiMs) / 1000));
+    oled.drawStr(2, 54, line);
+  }
   oled.sendBuffer();
 }
 
@@ -237,11 +246,14 @@ void loop() {
         uint32_t src = ((uint32_t)buf[0] << 24) | ((uint32_t)buf[1] << 16) |
                        ((uint32_t)buf[2] << 8) | buf[3];
         uint16_t seq = ((uint16_t)buf[4] << 8) | buf[5];
+        float rssi = radio.getRSSI();
         // Note: payload is BINARY (a RelayProtocol frame) — never print it as
         // text, or its bytes can mimic the 0xAA55 serial magic and desync a host.
-        Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f\n", src, seq, len, (double)radio.getRSSI());
+        Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f\n", src, seq, len, (double)rssi);
         if (src != nodeId) {        // ignore our own echo
           notePeer(src);            // a ZyPico device heard directly = in range
+          lastRssi = (int)rssi;     // signal strength of the last heard packet
+          lastRssiMs = millis();
           ws.binaryAll(buf, len);   // forward [srcId][seq][payload] to the browser
           serialEmitFrame(buf, len); // …and to the serial test harness
         }
@@ -263,9 +275,23 @@ void loop() {
   }
   prevDown = down;
 
-  // While the info screen is up, refresh it so the in-range count stays current.
+  // While the info screen is up, chirp a small ping so a peer (also on the info
+  // screen) gets a live RSSI reading — handy for walk/range tests.
+  static uint32_t lastPing = 0;
+  if (showInfo && millis() - lastPing > 1500) {
+    lastPing = millis();
+    uint8_t ping[MAC_HEADER + 4];
+    txSeq++;
+    ping[0] = nodeId >> 24; ping[1] = nodeId >> 16; ping[2] = nodeId >> 8; ping[3] = nodeId;
+    ping[4] = txSeq >> 8; ping[5] = txSeq;
+    memcpy(ping + MAC_HEADER, "PING", 4);
+    radio.transmit(ping, MAC_HEADER + 4);
+    radio.startReceive();
+  }
+
+  // …and refresh the screen so the in-range count + RSSI stay current.
   static uint32_t lastInfo = 0;
-  if (showInfo && millis() - lastInfo > 2000) {
+  if (showInfo && millis() - lastInfo > 700) {
     lastInfo = millis();
     drawInfo();
   }
