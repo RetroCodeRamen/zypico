@@ -10,11 +10,12 @@
 import { RelayClient } from "@app/RelayClient.ts";
 import { deriveIdentity } from "@core/identity/index.ts";
 import {
-  decodeMailAck, encodeStationBeacon, SERVICE, serviceTags, SubType, subTypeName,
+  decodeMailAck, decodePageReq, encodeStationBeacon, SERVICE, serviceTags, SubType, subTypeName,
 } from "@core/protocol/index.ts";
 import { decodePresence } from "@core/protocol/social.ts";
 import { SerialTransport } from "../harness/SerialTransport.ts";
 import { Mailbox } from "./mailbox.ts";
+import { PageStore } from "./pagestore.ts";
 
 const PORT = process.env.ZYPICO_STATION_PORT ?? "/dev/ttyUSB0";
 const NAME = process.env.ZYPICO_STATION_NAME ?? "HarborLight";
@@ -32,8 +33,9 @@ async function main(): Promise<void> {
   // login. It is NOT a Traveler identity.
   const id = await deriveIdentity(NAME, ADMIN_PW);
   const client = new RelayClient(new SerialTransport(PORT));
-  const store = process.env.ZYPICO_STATION_STORE ?? `tools/station/.mailbox-${id.fingerprint}.json`;
-  const mailbox = new Mailbox(store);
+  const base = process.env.ZYPICO_STATION_STORE ?? `tools/station/.mailbox-${id.fingerprint}`;
+  const mailbox = new Mailbox(`${base}.json`);
+  const pages = new PageStore(`${base}.pages.json`);
 
   client.onInbound((f) => {
     if (f.subtype === SubType.MAIL) {
@@ -48,13 +50,20 @@ async function main(): Promise<void> {
     } else if (f.subtype === SubType.MAIL_ACK) {
       const ack = decodeMailAck(f.payload);
       if (ack && mailbox.drop(ack.recipientFp, ack.mailId)) log(`mail acked + dropped (now ${mailbox.count})`);
+    } else if (f.subtype === SubType.PAGE) {
+      // Cache pages we overhear / are published to us (newest per owner).
+      if (pages.put(f.payload)) log(`hosting page (now ${pages.count})`);
+    } else if (f.subtype === SubType.PAGE_REQ) {
+      const r = decodePageReq(f.payload);
+      const hosted = r && pages.get(r.ownerFp);
+      if (hosted) { client.send(SubType.PAGE, hosted); log(`served hosted page for ${r!.ownerFp}`); }
     } else {
       log(`rx ${subTypeName(f.subtype)} (${f.payload.length}B, ${f.hops} hops)`);
     }
   });
 
   await client.connect();
-  log(`"${NAME}" up on ${PORT}  id=${id.fingerprint}  services=[${serviceTags(SERVICES).join(" ")}]  held=${mailbox.count}`);
+  log(`"${NAME}" up on ${PORT}  id=${id.fingerprint}  services=[${serviceTags(SERVICES).join(" ")}]  held=${mailbox.count} pages=${pages.count}`);
 
   const beacon = () => client.send(SubType.STATION, encodeStationBeacon(id, SERVICES));
   beacon();

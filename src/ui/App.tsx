@@ -10,6 +10,7 @@ import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
 } from "@core/companion/index.ts";
 import { PLACE_HOME } from "@core/protocol/social.ts";
+import { SERVICE } from "@core/protocol/index.ts";
 import type { Identity } from "@core/identity/index.ts";
 import { sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
@@ -72,7 +73,8 @@ export function App() {
   // peer-to-peer page exchange (serve/fetch over the mesh).
   const { myPage, load: loadPages, setTagline, setAbout } = usePages(identity?.fingerprint ?? null);
   const [pageView, setPageView] = useState<PageView | null>(null);
-  const pageExchange = usePageExchange(identity, link, () => myPage);
+  const pageStationFps = social.stations.filter((s) => s.services & SERVICE.PAGES).map((s) => s.fingerprint);
+  const pageExchange = usePageExchange(identity, link, () => myPage, pageStationFps);
 
   // The Post: Mail (compose/outbox/inbox), delivered when recipients are reachable.
   const reachableFps = social.nearby.filter((n) => Date.now() - n.lastSeen < 300_000).map((n) => n.fingerprint);

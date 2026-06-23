@@ -14,7 +14,12 @@ import type { Relay } from "@ui/hooks/useRelay.ts";
 // them later in M7). We serve our own page when a reachable Traveler asks, and
 // cache pages we fetch. The inbound handler is bound once and reads current
 // state through refs. `getMyPage` lets us serve the latest local edits.
-export function usePageExchange(identity: Identity | null, link: Relay, getMyPage: () => TravelerPage) {
+export function usePageExchange(
+  identity: Identity | null,
+  link: Relay,
+  getMyPage: () => TravelerPage,
+  pageStationFps: string[],
+) {
   const [pages, setPages] = useState<Record<string, PageMsg>>({}); // fingerprint → fetched page
   const [myGuestbook, setMyGuestbook] = useState<GuestEntry[]>([]); // entries left for me
   const identityRef = useRef<Identity | null>(identity);
@@ -47,7 +52,24 @@ export function usePageExchange(identity: Identity | null, link: Relay, getMyPag
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), []);
 
-  /** Ask a reachable Traveler for their page (their device serves it back). */
+  // Publish our page to each PAGES-capable Station we discover, so it stays
+  // fetchable when we're away (DESIGN §5.2). Once per station (per session).
+  const publishedRef = useRef(new Set<string>());
+  const stationKey = [...pageStationFps].sort().join(",");
+  useEffect(() => {
+    const me = identityRef.current;
+    const page = pageRef.current();
+    if (!me || page.updatedAt === 0) return;
+    for (const fp of pageStationFps) {
+      if (!publishedRef.current.has(fp)) {
+        publishedRef.current.add(fp);
+        link.send(SubType.PAGE, encodePage(me, page.tagline, page.about, page.updatedAt));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stationKey]);
+
+  /** Ask a reachable Traveler (or a hosting Station) for a page. */
   const requestPage = (ownerFp: string) => link.send(SubType.PAGE_REQ, encodePageReq(ownerFp));
 
   /** Sign a Traveler's guestbook (delivered to them; appears on their page). */
