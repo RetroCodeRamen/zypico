@@ -12,6 +12,9 @@ import {
   type DmThreads, type RoomLine,
   loadDmThreads, loadRoom, saveDmThreads, saveRoom,
 } from "@app/storage/messages.ts";
+import {
+  type Discovery, addDiscovery, loadDiscoveries, saveDiscoveries,
+} from "@app/storage/discoveries.ts";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { sfx } from "@ui/sound.ts";
 import type { InboundDecoded } from "@app/RelayClient.ts";
@@ -32,6 +35,7 @@ export function useSocial(
   const [nearby, setNearby] = useState<Presence[]>([]);
   const [dmThreads, setDmThreads] = useState<DmThreads>({});
   const [roomMsgs, setRoomMsgs] = useState<RoomLine[]>([]);
+  const [discoveries, setDiscoveries] = useState<Discovery[]>([]); // the Wisp's journal
   const hlcRef = useRef(new HybridLogicalClock());
   const seenRoomRef = useRef(new Set<string>()); // app-level dedupe of room messages
 
@@ -52,6 +56,9 @@ export function useSocial(
   useEffect(() => {
     if (identity) saveRoom(identity.fingerprint, roomMsgs);
   }, [roomMsgs, identity]);
+  useEffect(() => {
+    if (identity) saveDiscoveries(identity.fingerprint, discoveries);
+  }, [discoveries, identity]);
 
   const resolvePubkey = (fp: string): Uint8Array | undefined => {
     const b = buddiesRef.current.find((x) => x.fingerprint === fp);
@@ -75,7 +82,11 @@ export function useSocial(
       if (!p || p.fingerprint === me.fingerprint) return; // ignore self / forged
       const isNew = !nearbyRef.current.some((x) => x.fingerprint === p.fingerprint);
       setNearby((prev) => [...prev.filter((x) => x.fingerprint !== p.fingerprint), p].slice(-30));
-      if (isNew) onActivity("journey", 2); // discovering the world grows Journey
+      if (isNew) {
+        onActivity("journey", 2); // discovering the world grows Journey
+        // The Wisp notices the passing Traveler and remembers it (DESIGN §2).
+        setDiscoveries((prev) => addDiscovery(prev, { kind: "traveler", name: p.handle, at: Date.now() }));
+      }
     } else if (f.subtype === SubType.IM) {
       const env = decodeDM(f.payload);
       if (!env || env.recipientFp !== me.fingerprint) return; // not addressed to us
@@ -163,11 +174,12 @@ export function useSocial(
   const load = (fingerprint: string) => {
     setBuddies(loadBuddies(fingerprint));
     setDmThreads(loadDmThreads(fingerprint));
+    setDiscoveries(loadDiscoveries(fingerprint));
     const room = loadRoom(fingerprint);
     seenRoomRef.current = new Set(room.map(roomKey));
     for (const line of room) hlcRef.current.recv(line.ts);
     setRoomMsgs(room);
   };
 
-  return { buddies, nearby, dmThreads, roomMsgs, addBuddy, sendRoom, sendDM, load };
+  return { buddies, nearby, dmThreads, roomMsgs, discoveries, addBuddy, sendRoom, sendDM, load };
 }

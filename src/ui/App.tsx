@@ -117,7 +117,7 @@ export function App() {
     // WISP Place. Stats panel is view-only (CANCEL returns to care). Care panel:
     // the six care actions (move Mood, never Hearts), then RENAME, STATS, RESET.
     if (wispView) {
-      if (wispView.panel === "stats") {
+      if (wispView.panel === "stats" || wispView.panel === "journal") {
         if (action === "cancel") setWispView({ panel: "care", cursor: 0 });
         return;
       }
@@ -139,6 +139,9 @@ export function App() {
         } else if (i === CARES.length + 1) { // STATS
           sfx("select");
           setWispView({ panel: "stats", cursor: 0 });
+        } else if (i === CARES.length + 2) { // JOURNAL
+          sfx("select");
+          setWispView({ panel: "journal", cursor: 0 });
         } else if (CAN_RAISE) { // RESET (dev)
           sfx("cancel");
           setWisp(createWisp()); // TEST ONLY: start a fresh Flicker
@@ -259,6 +262,9 @@ export function App() {
 
   // The Wisp's settled mood (App owns the clock; the renderer stays pure).
   const now = Date.now();
+  // A recent thing the Wisp saw (last 24h) for it to mention on the home.
+  const latest = social.discoveries[social.discoveries.length - 1];
+  const sighting = latest && now - latest.at < 86_400_000 ? latest.name : undefined;
   const settledMood = settleMood(wisp.mood, now);
   const wispMood: MoodSummary = {
     state: moodState(wisp.mood, now),
@@ -291,7 +297,8 @@ export function App() {
             <Screen
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
-                wispMood, nearbyCount: social.nearby.length,
+                wispMood, discoveries: social.discoveries, sighting,
+                nearbyCount: social.nearby.length,
                 friends: inFriends
                   ? {
                       list: friendList,

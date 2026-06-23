@@ -21,6 +21,7 @@ import {
   type MoodState,
   type Wisp,
 } from "@core/companion/index.ts";
+import type { Discovery } from "@app/storage/discoveries.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
 
 // PICO-8 indices used as semantic colors for the UI register.
@@ -62,9 +63,10 @@ export interface EditView {
   value: string;
 }
 
-/** The WISP Place. `care` = care actions + reactions (front); `stats` = hearts. */
+/** The WISP Place. `care` = actions + reactions (front); `stats` = hearts;
+ * `journal` = "what I saw" (the Wisp's discoveries). */
 export interface WispView {
-  panel: "care" | "stats";
+  panel: "care" | "stats" | "journal";
   /** Highlighted action in the care panel (the action list, see CARE_ACTIONS). */
   cursor: number;
 }
@@ -126,6 +128,8 @@ export interface ScreenModel {
   wispView: WispView | null;
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
+  /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
+  discoveries: Discovery[];
   /** TRAVELERS screen state (buddy list + open DM thread), when in that place. */
   friends?: FriendsView;
   /** COMMONS chatroom state, when in that place. */
@@ -136,6 +140,8 @@ export interface ScreenModel {
   muted: boolean;
   /** Reachable Travelers right now — drives the home activity stars (§6.4). */
   nearbyCount: number;
+  /** A recent thing the Wisp saw, voiced on the idle home (DESIGN §2). */
+  sighting?: string;
 }
 
 export interface FriendsView {
@@ -193,6 +199,7 @@ export function drawCompanion(
   muted?: boolean,
   online?: boolean,
   nearbyCount = 0,
+  sighting?: string,
 ): void {
   buf.clear(C.bg);
   buf.fillRect(0, 66, buf.width, 14, C.ground);
@@ -244,12 +251,20 @@ export function drawCompanion(
   buf.fillRect(0, 72, buf.width, 8, C.ground);
   if (highlightLabel) {
     drawTextCentered(buf, 73, highlightLabel, C.title);
-  } else if (VOICED.has(mood.state)) {
-    // Voice the feeling: rotate the state's lines slowly (DESIGN §2/§6.5).
-    const lines = MOOD_STATE_DEFS[mood.state].lines;
-    drawTextCentered(buf, 73, lines[Math.floor(frame / 40) % lines.length], MOOD_STATE_DEFS[mood.state].color);
-  } else {
+    return;
+  }
+  // Idle: rotate through what the Wisp has to say — its feeling (when notable)
+  // and a recent thing it saw on the mesh (DESIGN §2 "shares what it saw").
+  const pool: [string, number][] = [];
+  if (VOICED.has(mood.state)) {
+    for (const l of MOOD_STATE_DEFS[mood.state].lines) pool.push([l, MOOD_STATE_DEFS[mood.state].color]);
+  }
+  if (sighting) pool.push([`I SAW ${sighting.toUpperCase()}`.slice(0, 21), C.ok]);
+  if (pool.length === 0) {
     drawTextCentered(buf, 73, "SELECT TO EXPLORE", C.dim);
+  } else {
+    const [text, color] = pool[Math.floor(frame / 40) % pool.length];
+    drawTextCentered(buf, 73, text, color);
   }
 }
 
@@ -339,7 +354,7 @@ export function drawEditor(buf: PixelBuffer, frame: number, edit: EditView): voi
 // The care panel's action order — the WispView cursor indexes this. First the
 // six care actions (CARES), then RENAME, STATS, and a dev-only RESET. App's
 // handler maps the same indices, so keep the two in lockstep.
-export const CARE_ACTION_LABELS = [...CARES.map((c) => CARE_DEFS[c].label), "RENAME", "STATS"];
+export const CARE_ACTION_LABELS = [...CARES.map((c) => CARE_DEFS[c].label), "RENAME", "STATS", "JOURNAL"];
 export function careActionCount(canRaise: boolean): number {
   return CARE_ACTION_LABELS.length + (canRaise ? 1 : 0);
 }
@@ -428,6 +443,36 @@ export function drawWispStats(buf: PixelBuffer, frame: number, wisp: Wisp): void
   drawTextCentered(buf, 73, "CANCEL BACK TO CARE", C.dim);
 }
 
+/** Short relative age, e.g. "NOW", "5M", "2H", "3D". */
+function ago(ms: number): string {
+  if (ms < 60_000) return "NOW";
+  if (ms < 3_600_000) return `${Math.floor(ms / 60_000)}M`;
+  if (ms < 86_400_000) return `${Math.floor(ms / 3_600_000)}H`;
+  return `${Math.floor(ms / 86_400_000)}D`;
+}
+
+/** The WISP journal: what the Wisp saw while it lived its life (DESIGN §2). */
+export function drawWispJournal(buf: PixelBuffer, discoveries: Discovery[], now: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "WHAT I SAW", C.title);
+  divider(buf, 9);
+  if (discoveries.length === 0) {
+    drawTextCentered(buf, 30, "NOTHING YET", C.dim);
+    drawTextCentered(buf, 40, "THE WISP IS WATCHING", C.dim);
+  } else {
+    // Newest first; the Wisp recounts its recent sightings.
+    [...discoveries].reverse().slice(0, 8).forEach((d, i) => {
+      const y = 13 + i * 7;
+      const age = ago(Math.max(0, now - d.at));
+      drawText(buf, 2, y, "-", d.kind === "station" ? C.tagRelay : C.ok);
+      drawText(buf, 7, y, d.name.toUpperCase().slice(0, 16), C.text);
+      drawText(buf, buf.width - measureText(age) - 3, y, age, C.dim);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "CANCEL BACK TO CARE", C.dim);
+}
+
 /** FRIENDS — buddy list (added first, then nearby with an ADD hint). */
 export function drawFriends(buf: PixelBuffer, v: FriendsView): void {
   if (v.thread) {
@@ -498,6 +543,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   if (model.wispView) {
     if (model.wispView.panel === "stats") drawWispStats(buf, frame, model.wisp);
+    else if (model.wispView.panel === "journal") drawWispJournal(buf, model.discoveries, Date.now());
     else drawWispCare(buf, frame, model.wisp, model.wispView, model.wispMood, model.canRaise);
     return;
   }
@@ -506,7 +552,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     drawCompanion(
       buf, frame, model.wisp, model.wispMood,
       nav.iconIndex !== null ? PLACES[nav.iconIndex].label : undefined,
-      model.muted, model.relay.online, model.nearbyCount,
+      model.muted, model.relay.online, model.nearbyCount, model.sighting,
     );
     return;
   }
