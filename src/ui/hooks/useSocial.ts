@@ -22,6 +22,10 @@ import type { Relay } from "@ui/hooks/useRelay.ts";
 
 const roomKey = (line: RoomLine) => `${line.senderFp}:${line.ts.wallMs}.${line.ts.counter}`;
 
+// Commons history (DESIGN §4.4): a town square, not a forum. ~10 recent messages
+// without a Station; a Station deepens it to ~50 (M7).
+const COMMONS_HISTORY = 10;
+
 const PRESENCE_INTERVAL = 60_000; // DESIGN §4.1 — beacon every 60 s
 
 /** What a presence beacon should advertise right now (Wisp form + location). */
@@ -87,7 +91,7 @@ export function useSocial(
     const key = roomKey(line);
     if (seenRoomRef.current.has(key)) return;
     seenRoomRef.current.add(key);
-    setRoomMsgs((prev) => [...prev, line].sort((a, b) => compareHlc(a.ts, b.ts)).slice(-60));
+    setRoomMsgs((prev) => [...prev, line].sort((a, b) => compareHlc(a.ts, b.ts)).slice(-COMMONS_HISTORY));
   };
 
   const handleInbound = (f: InboundDecoded) => {

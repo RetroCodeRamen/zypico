@@ -280,7 +280,13 @@ export function App() {
       if (friendsThread) {
         const buddy = social.buddies.find((b) => b.fingerprint === friendsThread);
         if (action === "accept" && buddy) {
-          setEditing({ label: `DM ${buddy.petname ?? buddy.handle}`.slice(0, 18), value: "", onSubmit: (v) => social.sendDM(buddy, v) });
+          const name = buddy.petname ?? buddy.handle;
+          if (reachableFps.includes(buddy.fingerprint)) {
+            setEditing({ label: `DM ${name}`.slice(0, 18), value: "", onSubmit: (v) => social.sendDM(buddy, v) });
+          } else {
+            // Chat needs the peer reachable; offer Mail instead (never silent).
+            setEditing({ label: `MAIL ${name}`.slice(0, 18), value: "", onSubmit: (v) => postOffice.compose(buddy.fingerprint, name, v) });
+          }
         } else if (action === "cancel") {
           setFriendsThread(null);
         }
@@ -475,6 +481,7 @@ export function App() {
                         ? {
                             title: (social.buddies.find((b) => b.fingerprint === friendsThread)?.handle ?? "DM").toUpperCase(),
                             messages: social.dmThreads[friendsThread] ?? [],
+                            reachable: reachableFps.includes(friendsThread),
                           }
                         : null,
                     }

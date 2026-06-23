@@ -206,7 +206,12 @@ export interface FriendsView {
     via?: "nearby" | "relay";
   }[];
   cursor: number;
-  thread: { title: string; messages: { out: boolean; text: string }[] } | null;
+  thread: {
+    title: string;
+    messages: { out: boolean; text: string }[];
+    /** Is the buddy reachable right now? Gates live Chat (DESIGN §4.4). */
+    reachable: boolean;
+  } | null;
 }
 
 export interface ChatView {
@@ -721,8 +726,10 @@ export function drawFriends(buf: PixelBuffer, v: FriendsView): void {
 
 function drawDmThread(buf: PixelBuffer, thread: NonNullable<FriendsView["thread"]>): void {
   buf.clear(C.bg);
-  drawText(buf, 3, 2, thread.title.slice(0, 18), C.title);
-  drawText(buf, buf.width - measureText("DM") - 3, 2, "DM", C.tagRelay);
+  drawText(buf, 3, 2, thread.title.slice(0, 16), C.title);
+  // Chat is live only while the buddy is reachable (DESIGN §4.4).
+  const tag = thread.reachable ? "DM" : "OFFLINE";
+  drawText(buf, buf.width - measureText(tag) - 3, 2, tag, thread.reachable ? C.tagRelay : C.warn);
   divider(buf, 9);
   if (thread.messages.length === 0) {
     drawTextCentered(buf, 34, "ENCRYPTED - SAY HI", C.dim);
@@ -734,7 +741,13 @@ function drawDmThread(buf: PixelBuffer, thread: NonNullable<FriendsView["thread"
     });
   }
   buf.fillRect(0, 72, buf.width, 8, C.ground);
-  drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
+  // Unreachable → offer Mail instead (never silently convert Chat to Mail).
+  if (thread.reachable) {
+    drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
+  } else {
+    drawTextCentered(buf, 66, "TRAVELER UNAVAILABLE", C.warn);
+    drawTextCentered(buf, 73, "ACCEPT = SEND AS MAIL", C.dim);
+  }
 }
 
 /** THE COMMONS — a public chatroom log with a live presence count; ACCEPT writes. */
