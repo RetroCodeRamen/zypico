@@ -5,16 +5,16 @@ import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce } from "@ui/shell/nav.ts";
 import { drawLogin } from "@ui/scenes/render.ts";
-import type { EditView, LoginView } from "@ui/scenes/render.ts";
+import type { EditView } from "@ui/scenes/render.ts";
 import { applyActivity, createWisp, HEARTS, renameWisp, wispForm } from "@core/companion/index.ts";
-import { deriveIdentity, type Identity } from "@core/identity/index.ts";
-import { clearStoredIdentity, loadStoredIdentity, saveStoredIdentity } from "@app/storage/identity.ts";
+import type { Identity } from "@core/identity/index.ts";
 import { sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
 import { useMuted } from "@ui/hooks/useMuted.ts";
 import { useCompanion } from "@ui/hooks/useCompanion.ts";
 import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
+import { useIdentity } from "@ui/hooks/useIdentity.ts";
 
 // Points granted per local "raise" action. This is a TEST-ONLY affordance,
 // gated to dev builds (CAN_RAISE) — hearts are meant to be earned through
@@ -37,18 +37,11 @@ export function App() {
   const [editing, setEditing] = useState<Editing | null>(null);
 
   // Identity gate — nothing is shown until the traveler logs in (outline §13.6).
-  const storedRef = useRef(loadStoredIdentity());
-  const [identity, setIdentity] = useState<Identity | null>(null);
-  const [login, setLogin] = useState<LoginView>(() => {
-    const s = storedRef.current;
-    return {
-      mode: s ? "login" : "create",
-      handle: s?.handle ?? "",
-      password: "",
-      field: s ? "password" : "handle",
-      busy: false,
-    };
-  });
+  // On login we load per-identity state and bring the link up; that wiring lives
+  // below the dependent hooks, so the callback is reached through a ref.
+  const postAuthRef = useRef<(id: Identity) => void>(() => {});
+  const { identity, login, loginType, loginBackspace, handleButton: handleLoginButton } =
+    useIdentity((id) => postAuthRef.current(id));
 
   // The companion (local-first; per-identity). Autosaves under the fingerprint.
   const { wisp, setWisp, wispView, setWispView, load: loadCompanion } =
@@ -60,6 +53,13 @@ export function App() {
   const social = useSocial(identity, link);
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
+
+  // Reached at login (after identity is derived, before the gate lifts).
+  postAuthRef.current = (id: Identity) => {
+    loadCompanion(id.fingerprint);
+    social.load(id.fingerprint);
+    void link.connectBoard(true); // always-on link to the board, no manual step
+  };
 
   // Sound on/off (persisted), kept in sync with the sound module.
   const [muted, setMutedState] = useMuted();
@@ -83,68 +83,6 @@ export function App() {
     });
   };
   const editCancel = () => setEditing(null);
-
-  // ---- Login gate (handle + password → identity; before anything else) ----
-  const loginType = (ch: string) => {
-    sfx("type");
-    setLogin((l) => ({ ...l, [l.field]: l[l.field] + ch, error: undefined }));
-  };
-  const loginBackspace = () => {
-    sfx("type");
-    setLogin((l) => ({ ...l, [l.field]: l[l.field].slice(0, -1) }));
-  };
-  const submitLogin = async () => {
-    const handle = login.handle.trim();
-    const password = login.password;
-    if (!handle || !password) {
-      setLogin((l) => ({ ...l, error: "ENTER HANDLE + PASSWORD" }));
-      sfx("error");
-      return;
-    }
-    setLogin((l) => ({ ...l, busy: true, error: undefined }));
-    try {
-      const id = await deriveIdentity(handle, password);
-      const s = storedRef.current;
-      if (s && s.fingerprint !== id.fingerprint) {
-        setLogin((l) => ({ ...l, busy: false, password: "", error: "WRONG PASSWORD" }));
-        sfx("error");
-        return;
-      }
-      saveStoredIdentity({ handle: id.handle, fingerprint: id.fingerprint });
-      storedRef.current = { handle: id.handle, fingerprint: id.fingerprint };
-      loadCompanion(id.fingerprint);
-      social.load(id.fingerprint);
-      setIdentity(id);
-      setLogin((l) => ({ ...l, busy: false, password: "" }));
-      sfx("connect");
-      void link.connectBoard(true); // always-on link to the board, no manual step
-
-    } catch {
-      setLogin((l) => ({ ...l, busy: false, error: "LOGIN FAILED" }));
-      sfx("error");
-    }
-  };
-  const handleLoginButton = (action: ButtonAction) => {
-    if (login.busy) return;
-    if (action === "select") {
-      sfx("select");
-      if (login.mode === "create") {
-        setLogin((l) => ({ ...l, field: l.field === "handle" ? "password" : "handle" }));
-      }
-    } else if (action === "accept") {
-      void submitLogin();
-    } else if (action === "cancel") {
-      sfx("cancel");
-      if (login.mode === "login") {
-        // Switch traveler: forget the stored identity and create a new one.
-        clearStoredIdentity();
-        storedRef.current = null;
-        setLogin({ mode: "create", handle: "", password: "", field: "handle", busy: false });
-      } else {
-        setLogin((l) => ({ ...l, [l.field]: "" }));
-      }
-    }
-  };
 
   // FRIENDS: buddies (added) listed first, then nearby (heard, not yet added).
   const friendList: { kind: "buddy" | "nearby"; handle: string; fingerprint: string }[] = [
