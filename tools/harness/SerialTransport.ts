@@ -74,8 +74,11 @@ export class SerialTransport implements MeshTransport {
       Buffer.from([MAGIC0, MAGIC1, (len >> 8) & 0xff, len & 0xff]),
       Buffer.from(payload),
     ]);
-    writeSync(this.fd, frame); // the board stamps src/seq and transmits
-    return Promise.resolve(0);
+    // writeSync can do a partial write on a tty — loop until the whole frame is
+    // out, or a large frame arrives truncated and the board drops it.
+    let off = 0;
+    while (off < frame.length) off += writeSync(this.fd, frame, off, frame.length - off);
+    return Promise.resolve(0); // the board stamps src/seq and transmits
   }
 
   private setStatus(s: TransportStatus): void {
@@ -105,6 +108,7 @@ export class SerialTransport implements MeshTransport {
   }
 
   private emitFrame(b: Buffer): void {
+    if (process.env.ST_DEBUG) process.stderr.write(`  [ST ${this.port}] frame len=${b.length} sub=0x${(b[7] ?? 0).toString(16)}\n`);
     // b = [srcId:4 BE][seq:2 BE][payload] — the firmware's heard-packet framing.
     const from = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
     const packetId = (b[4] << 8) | b[5];

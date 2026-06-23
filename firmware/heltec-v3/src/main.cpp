@@ -237,8 +237,9 @@ void loop() {
         uint32_t src = ((uint32_t)buf[0] << 24) | ((uint32_t)buf[1] << 16) |
                        ((uint32_t)buf[2] << 8) | buf[3];
         uint16_t seq = ((uint16_t)buf[4] << 8) | buf[5];
-        Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f data='%.*s'\n", src, seq, len,
-                      (double)radio.getRSSI(), len - MAC_HEADER, (const char *)&buf[MAC_HEADER]);
+        // Note: payload is BINARY (a RelayProtocol frame) — never print it as
+        // text, or its bytes can mimic the 0xAA55 serial magic and desync a host.
+        Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f\n", src, seq, len, (double)radio.getRSSI());
         if (src != nodeId) {        // ignore our own echo
           notePeer(src);            // a ZyPico device heard directly = in range
           ws.binaryAll(buf, len);   // forward [srcId][seq][payload] to the browser

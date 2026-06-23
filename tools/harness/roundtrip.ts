@@ -34,8 +34,8 @@ async function main(): Promise<void> {
   // later frames — this harness tests delivery/decode/dedupe over the radio (the
   // governor has its own unit tests). The full RelayClient *receive* pipeline
   // (dedupe, repeat, hop count) is still exercised on the far side.
-  const txA = (sub: SubType, payload: Uint8Array) => tA.sendFrame(encodeFrame(sub, payload));
-  const txB = (sub: SubType, payload: Uint8Array) => tB.sendFrame(encodeFrame(sub, payload));
+  const txA = (sub: SubType, payload: Uint8Array) => tA.sendFrame(encodeFrame(sub, payload, { hopLimit: 1 }));
+  const txB = (sub: SubType, payload: Uint8Array) => tB.sendFrame(encodeFrame(sub, payload, { hopLimit: 1 }));
 
   // --- inbound capture ---
   let bHeardA = false;          // B hears A's presence
