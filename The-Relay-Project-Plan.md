@@ -6,7 +6,7 @@ _Status: draft v1 · Last updated 2026-06-20_
 
 **Related docs:** [docs/DESIGN.md](docs/DESIGN.md) (**canonical design direction, v3** — read first) · [The-Relay-Outline-v2.md](The-Relay-Outline-v2.md) (background mechanics; superseded by DESIGN for direction) · [The-Relay-Screens.html](The-Relay-Screens.html) (visual reference) · [docs/protocol.md](docs/protocol.md) (RelayProtocol wire spec) · [docs/adr/](docs/adr/) (decision records).
 
-**Build progress (last updated 2026-06-22 · 89 unit tests passing):**
+**Build progress (last updated 2026-06-23 · 91 unit tests passing):**
 
 **Deployment shape (settled — ADR 0004).** ZyPico runs on the **device itself**: a
 **Heltec WiFi LoRa 32 V3** flashed with custom firmware (`firmware/heltec-v3/`)
@@ -26,9 +26,11 @@ Web Bluetooth, HTTP-to-node) were removed in the cleanup — see git history / A
 - **Phase 2 — identity & crypto.** **Login gate before anything** (handle + password → Ed25519 keypair via Argon2id; offline, no reset; per-identity local state). Signed **presence beacons**, and **end-to-end DMs** (X25519 + XChaCha20-Poly1305). `@noble/*`.
 - **UI shell (§7) — Tamagotchi.** One LCD plate: hi-res vector place-icons framing the **128×80 16-color dot matrix** (all menus render inside it, 3×5 font). **Three buttons** (SELECT/ACCEPT/CANCEL; arrows ←/↓/→), idle home with no icon selected, PICO-8 palette, early-2000s colorway, uniform scale-to-fit, **on-screen QWERTY** below the buttons (see [[keyboard-placement]]), chiptune SFX.
 - **Companion (§3, Phase 5).** Hearts engine (five Hearts; Flicker→Ember→Glow→Beacon; full 1→2→4→8 tree + drift). Wisp persists **per-identity** (localStorage), renders procedurally + animated on HOME, **MY WISP** detail under PROFILE. Hearts grown via a **dev-only** raise action until real activity hooks land.
-- **Social (§4/§8, Phase 3).** **FRIENDS** = discovery (nearby from presence) → add buddy (TOFU key pin) → **encrypted DM threads**. MAIL folded in.
+- **Social (§4/§8, Phase 3).** **TRAVELERS** = discovery (nearby from presence) → add buddy (TOFU key pin) → **encrypted DM threads**; **COMMONS** public chatroom (HLC-ordered). MAIL folded in.
+- **M1 — Structural foundation (done 2026-06-23).** Dropped dead `@meshtastic/*` deps + shims. Decomposed `App.tsx` (591→320 lines) into a **domain-hook layer** (`useIdentity`/`useRelay`/`useSocial`/`useCompanion` + `useViewportScale`/`useMuted`); App is now thin composition + the button/nav controller. **Persistence**: DM threads + chatroom now survive reload (per-fingerprint `localStorage`, swappable for Dexie behind the storage seam).
+- **M2 — Worldify the shell (done 2026-06-23).** Eight Places (Commons/Travelers/Post/Pages/Wisp/Arcade/Exchange/Profile); **Radio removed** → ambient connectivity (home `=RELAY`/`OFFLINE` glyph; re-link under Profile › RELAY); **Wisp is a Place** (home stays the living Wisp); **activity stars** brighten with nearby count; new place icons.
 
-**Next (see discussion):** Relay **chatrooms** (main public room + others) with **join-time history backfill** (last ~10 msgs / 15 min, advertise-then-pull); **persistence** (DM/room history, Dexie); real **activity→heart** hooks; companion lineage/gift.
+**Next:** **M3 — the Wisp comes alive** (Bond/Mood care axis, "lives its life"/shares discoveries, real activity→heart hooks, retire the dev raise). Then M4 (Commons + multi-hop baseline). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults (M7) need it.
 
 **Design status:** the spec is build-ready. Identity/crypto, transport/mesh, companion model, sandbox, and the visual system are all decided. Four screens are designed and the surface grammar is proven. Remaining unknowns are best resolved during implementation, not further outlining.
 
