@@ -12,10 +12,11 @@ import { deriveIdentity } from "@core/identity/index.ts";
 import {
   decodeMailAck, decodePageReq, encodeStationBeacon, SERVICE, serviceTags, SubType, subTypeName,
 } from "@core/protocol/index.ts";
-import { decodePresence } from "@core/protocol/social.ts";
+import { decodeCommonsReq, decodePresence } from "@core/protocol/social.ts";
 import { SerialTransport } from "../harness/SerialTransport.ts";
 import { Mailbox } from "./mailbox.ts";
 import { PageStore } from "./pagestore.ts";
+import { CommonsLog } from "./commons.ts";
 
 const PORT = process.env.ZYPICO_STATION_PORT ?? "/dev/ttyUSB0";
 const NAME = process.env.ZYPICO_STATION_NAME ?? "HarborLight";
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
   const base = process.env.ZYPICO_STATION_STORE ?? `tools/station/.mailbox-${id.fingerprint}`;
   const mailbox = new Mailbox(`${base}.json`);
   const pages = new PageStore(`${base}.pages.json`);
+  const commons = new CommonsLog(50, `${base}.commons.json`);
 
   client.onInbound((f) => {
     if (f.subtype === SubType.MAIL) {
@@ -57,6 +59,13 @@ async function main(): Promise<void> {
       const r = decodePageReq(f.payload);
       const hosted = r && pages.get(r.ownerFp);
       if (hosted) { client.send(SubType.PAGE, hosted); log(`served hosted page for ${r!.ownerFp}`); }
+    } else if (f.subtype === SubType.POST) {
+      if (commons.add(f.payload)) log(`commons retained (now ${commons.count})`);
+    } else if (f.subtype === SubType.COMMONS_REQ) {
+      decodeCommonsReq(f.payload); // (room id; single room today)
+      const recent = commons.recent(20);
+      for (const payload of recent) client.send(SubType.POST, payload);
+      if (recent.length) log(`backfilled ${recent.length} Commons posts`);
     } else {
       log(`rx ${subTypeName(f.subtype)} (${f.payload.length}B, ${f.hops} hops)`);
     }

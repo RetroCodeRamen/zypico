@@ -146,3 +146,14 @@ export function decodeRoomMsg(payload: Uint8Array): RoomMsg | null {
   o += handleLen;
   return { roomId, hlc, senderFp, handle, text: fromUtf8(payload.subarray(o)) };
 }
+
+// ---- Commons backfill request: "Station, replay recent history for this room" ----
+// Layout: [roomId:1]. The Station replies by re-sending stored POSTs.
+
+export function encodeCommonsReq(roomId: number): Uint8Array {
+  return Uint8Array.of(roomId & 0xff);
+}
+
+export function decodeCommonsReq(payload: Uint8Array): { roomId: number } {
+  return { roomId: payload.length > 0 ? payload[0] : MAIN_ROOM };
+}

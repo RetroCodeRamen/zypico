@@ -5,9 +5,9 @@ import {
   compareHlc, decodeHlc, encodeHlc, HybridLogicalClock, SubType,
 } from "@core/protocol/index.ts";
 import {
-  decodeDM, decodePresence, decodeRoomMsg, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM, type Presence,
+  decodeDM, decodePresence, decodeRoomMsg, encodeCommonsReq, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM, type Presence,
 } from "@core/protocol/social.ts";
-import { decodeStationBeacon, type StationBeacon } from "@core/protocol/index.ts";
+import { decodeStationBeacon, SERVICE, type StationBeacon } from "@core/protocol/index.ts";
 import { type Buddy, loadBuddies, saveBuddies, upsertBuddy } from "@app/storage/buddies.ts";
 import {
   type DmThreads, type RoomLine,
@@ -24,8 +24,10 @@ import type { Relay } from "@ui/hooks/useRelay.ts";
 const roomKey = (line: RoomLine) => `${line.senderFp}:${line.ts.wallMs}.${line.ts.counter}`;
 
 // Commons history (DESIGN §4.4): a town square, not a forum. ~10 recent messages
-// without a Station; a Station deepens it to ~50 (M7).
+// without a Station; a COMMONS-capable Station deepens it to ~50.
 const COMMONS_HISTORY = 10;
+const COMMONS_HISTORY_STATION = 50;
+const STATION_WINDOW_MS = 300_000;
 
 const PRESENCE_INTERVAL = 60_000; // DESIGN §4.1 — beacon every 60 s
 
@@ -96,12 +98,16 @@ export function useSocial(
     return nearbyRef.current.find((x) => x.fingerprint === fp)?.publicKey;
   };
 
-  // Insert a room message (app-deduped, HLC-ordered).
+  // Insert a room message (app-deduped, HLC-ordered). A nearby COMMONS Station
+  // deepens how much history we keep.
   const ingestRoom = (line: RoomLine) => {
     const key = roomKey(line);
     if (seenRoomRef.current.has(key)) return;
     seenRoomRef.current.add(key);
-    setRoomMsgs((prev) => [...prev, line].sort((a, b) => compareHlc(a.ts, b.ts)).slice(-COMMONS_HISTORY));
+    const now = Date.now();
+    const hasStation = stationsRef.current.some((s) => (s.services & SERVICE.COMMONS) && now - s.lastSeen < STATION_WINDOW_MS);
+    const cap = hasStation ? COMMONS_HISTORY_STATION : COMMONS_HISTORY;
+    setRoomMsgs((prev) => [...prev, line].sort((a, b) => compareHlc(a.ts, b.ts)).slice(-cap));
   };
 
   const handleInbound = (f: InboundDecoded) => {
@@ -164,6 +170,21 @@ export function useSocial(
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity, link.view.online]);
+
+  // Ask each COMMONS-capable Station to backfill recent history, once on discovery
+  // — so the town square isn't empty when you arrive (DESIGN §4.4).
+  const backfilledRef = useRef(new Set<string>());
+  const commonsStationKey = stations.filter((s) => s.services & SERVICE.COMMONS).map((s) => s.fingerprint).sort().join(",");
+  useEffect(() => {
+    if (!identity) return;
+    for (const s of stations) {
+      if ((s.services & SERVICE.COMMONS) && !backfilledRef.current.has(s.fingerprint)) {
+        backfilledRef.current.add(s.fingerprint);
+        link.send(SubType.COMMONS_REQ, encodeCommonsReq(MAIN_ROOM));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commonsStationKey, identity]);
 
   const addBuddy = (p: Presence) => {
     setBuddies((prev) => upsertBuddy(prev, {
