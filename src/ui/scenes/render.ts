@@ -173,11 +173,22 @@ function activityStars(nearbyCount: number): number {
   return nearbyCount <= 3 ? 1 : nearbyCount <= 6 ? 2 : 3;
 }
 
-/** The companion home: the Wisp wandering, its name above, the idle hint below. */
+// How much the Wisp moves by mood — happy roams, lonely/sad/sleepy go still
+// (DESIGN §2: "moves less, animates differently"). Never zero — always alive.
+const LIVELINESS: Record<MoodState, number> = {
+  joyful: 1, happy: 0.85, content: 0.6, okay: 0.5,
+  hungry: 0.5, messy: 0.5, lonely: 0.3, sad: 0.25, sleepy: 0.12,
+};
+
+// States whose feeling is worth voicing on the idle home (others stay neutral).
+const VOICED: ReadonlySet<MoodState> = new Set(["joyful", "lonely", "sad", "sleepy", "hungry", "messy"]);
+
+/** The companion home: the Wisp (mood-driven), its name above, the idle hint below. */
 export function drawCompanion(
   buf: PixelBuffer,
   frame: number,
   wisp: Wisp,
+  mood: MoodSummary,
   highlightLabel?: string,
   muted?: boolean,
   online?: boolean,
@@ -200,21 +211,30 @@ export function drawCompanion(
 
   if (wisp.name) drawTextCentered(buf, 3, wisp.name.toUpperCase(), C.title);
 
-  // Occasional little hop ("doing things"): a couple of bounces now and then.
+  // Motion scales with mood: a happy Wisp roams + hops, a low one barely drifts.
+  const live = LIVELINESS[mood.state];
+  const pos = (t: number) => ({ x: 64 + (wanderX(t) - 64) * live, y: 40 + (wanderY(t) - 40) * live });
   const hopPhase = frame % 175;
-  const hop = hopPhase < 22 ? -Math.abs(Math.sin(hopPhase * 0.45)) * 7 : 0;
-  const cx = Math.round(wanderX(frame));
-  const cy = Math.round(wanderY(frame) + hop);
+  const hop = (hopPhase < 22 ? -Math.abs(Math.sin(hopPhase * 0.45)) * 7 : 0) * live;
+  const here = pos(frame);
+  const cx = Math.round(here.x);
+  const cy = Math.round(here.y + hop);
 
   // A faint motion trail behind it.
   for (let k = 3; k >= 1; k--) {
-    buf.set(Math.round(wanderX(frame - k * 5)), Math.round(wanderY(frame - k * 5)), k === 1 ? C.text : C.dim);
+    const p = pos(frame - k * 5);
+    buf.set(Math.round(p.x), Math.round(p.y), k === 1 ? C.text : C.dim);
   }
 
   drawWisp(buf, cx, cy, frame, wispForm(wisp), 1);
 
-  // Now and then it scatters a few sparkles around itself.
-  if (frame % 240 < 12) {
+  if (mood.state === "sleepy") {
+    // Drifting "z z z" above a dozing Wisp.
+    "ZZZ".split("").forEach((z, i) => {
+      if ((frame + i * 8) % 36 < 24) drawText(buf, cx + 8 + i * 4, cy - 12 - i * 3, z, C.dim);
+    });
+  } else if ((mood.state === "joyful" || mood.state === "happy") && frame % 240 < 12) {
+    // A happy Wisp scatters sparkles now and then.
     for (let i = 0; i < 5; i++) {
       const a = (i / 5) * Math.PI * 2 + frame * 0.2;
       buf.set(cx + Math.round(Math.cos(a) * 16), cy + Math.round(Math.sin(a) * 12), C.textHi);
@@ -222,8 +242,15 @@ export function drawCompanion(
   }
 
   buf.fillRect(0, 72, buf.width, 8, C.ground);
-  if (highlightLabel) drawTextCentered(buf, 73, highlightLabel, C.title);
-  else drawTextCentered(buf, 73, "SELECT TO EXPLORE", C.dim);
+  if (highlightLabel) {
+    drawTextCentered(buf, 73, highlightLabel, C.title);
+  } else if (VOICED.has(mood.state)) {
+    // Voice the feeling: rotate the state's lines slowly (DESIGN §2/§6.5).
+    const lines = MOOD_STATE_DEFS[mood.state].lines;
+    drawTextCentered(buf, 73, lines[Math.floor(frame / 40) % lines.length], MOOD_STATE_DEFS[mood.state].color);
+  } else {
+    drawTextCentered(buf, 73, "SELECT TO EXPLORE", C.dim);
+  }
 }
 
 function divider(buf: PixelBuffer, y: number): void {
@@ -477,7 +504,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   const { nav } = model;
   if (nav.level === "home") {
     drawCompanion(
-      buf, frame, model.wisp,
+      buf, frame, model.wisp, model.wispMood,
       nav.iconIndex !== null ? PLACES[nav.iconIndex].label : undefined,
       model.muted, model.relay.online, model.nearbyCount,
     );
