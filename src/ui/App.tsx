@@ -1,11 +1,11 @@
-import { useEffect, useLayoutEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { Screen } from "@ui/shell/Screen.tsx";
 import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce } from "@ui/shell/nav.ts";
 import { drawLogin } from "@ui/scenes/render.ts";
-import type { EditView, LoginView, RelayView, WispView } from "@ui/scenes/render.ts";
+import type { EditView, LoginView, RelayView } from "@ui/scenes/render.ts";
 import { BoardTransport } from "@transport/index.ts";
 import type { MeshTransport, TransportStatus } from "@transport/index.ts";
 import { RelayClient, type InboundDecoded } from "@app/RelayClient.ts";
@@ -17,13 +17,13 @@ import {
 import {
   decodeDM, decodePresence, decodeRoomMsg, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM, type Presence,
 } from "@core/protocol/social.ts";
-import { loadWisp, saveWisp } from "@app/storage/wisp.ts";
 import { clearStoredIdentity, loadStoredIdentity, saveStoredIdentity } from "@app/storage/identity.ts";
 import { type Buddy, loadBuddies, saveBuddies, upsertBuddy } from "@app/storage/buddies.ts";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
-import { setMuted, sfx } from "@ui/sound.ts";
-
-const MUTE_KEY = "zypico.muted";
+import { sfx } from "@ui/sound.ts";
+import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
+import { useMuted } from "@ui/hooks/useMuted.ts";
+import { useCompanion } from "@ui/hooks/useCompanion.ts";
 
 // Points granted per local "raise" action. This is a TEST-ONLY affordance,
 // gated to dev builds (CAN_RAISE) — hearts are meant to be earned through
@@ -55,10 +55,6 @@ export function App() {
   const clientRef = useRef<RelayClient | undefined>(undefined);
   const viaRef = useRef<string | undefined>(undefined); // how we're linked (for STATUS)
 
-  // The companion (local-first; per-identity). Loaded on login.
-  const [wisp, setWisp] = useState(() => createWisp());
-  const [wispView, setWispView] = useState<WispView | null>(null);
-
   // Identity gate — nothing is shown until the traveler logs in (outline §13.6).
   const storedRef = useRef(loadStoredIdentity());
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -72,9 +68,10 @@ export function App() {
       busy: false,
     };
   });
-  useEffect(() => {
-    if (identity) saveWisp(identity.fingerprint, wisp);
-  }, [wisp, identity]);
+
+  // The companion (local-first; per-identity). Autosaves under the fingerprint.
+  const { wisp, setWisp, wispView, setWispView, load: loadCompanion } =
+    useCompanion(identity?.fingerprint ?? null);
 
   // ---- Social: buddies, nearby (heard via presence), and DM threads ----
   const [buddies, setBuddies] = useState<Buddy[]>([]);
@@ -99,42 +96,10 @@ export function App() {
   }, [buddies, identity]);
 
   // Sound on/off (persisted), kept in sync with the sound module.
-  const [muted, setMutedState] = useState(() => localStorage.getItem(MUTE_KEY) === "1");
-  useEffect(() => {
-    setMuted(muted);
-    localStorage.setItem(MUTE_KEY, muted ? "1" : "0");
-  }, [muted]);
+  const [muted, setMutedState] = useMuted();
 
-  // Scale-to-fit: the gadget is laid out at its true design size, then scaled by
-  // one uniform factor to fit the viewport — preserving the aspect ratio exactly
-  // (no stretching), fitting both phone and desktop.
-  const stageRef = useRef<HTMLDivElement>(null);
-  const deviceRef = useRef<HTMLDivElement>(null);
-  const [scale, setScale] = useState(1);
-
-  useLayoutEffect(() => {
-    const fit = () => {
-      const stage = stageRef.current;
-      const device = deviceRef.current;
-      if (!stage || !device) return;
-      // offsetWidth/Height report the pre-transform layout size, so measuring
-      // while scaled is safe and doesn't feed back.
-      const natW = device.offsetWidth;
-      const natH = device.offsetHeight;
-      if (natW === 0 || natH === 0) return;
-      const s = Math.min(stage.clientWidth / natW, stage.clientHeight / natH);
-      setScale(s);
-    };
-    fit();
-    const ro = new ResizeObserver(fit);
-    if (stageRef.current) ro.observe(stageRef.current);
-    if (deviceRef.current) ro.observe(deviceRef.current);
-    window.addEventListener("resize", fit);
-    return () => {
-      ro.disconnect();
-      window.removeEventListener("resize", fit);
-    };
-  }, []);
+  // Scale-to-fit: laid out at true design size, scaled by one uniform factor.
+  const { stageRef, deviceRef, scale } = useViewportScale();
 
   // ---- Text entry (HTML keyboard → active LCD field) ----
   const editType = (ch: string) => {
@@ -311,7 +276,7 @@ export function App() {
       saveStoredIdentity({ handle: id.handle, fingerprint: id.fingerprint });
       storedRef.current = { handle: id.handle, fingerprint: id.fingerprint };
       identityRef.current = id;
-      setWisp(loadWisp(id.fingerprint));
+      loadCompanion(id.fingerprint);
       setBuddies(loadBuddies(id.fingerprint));
       setIdentity(id);
       setLogin((l) => ({ ...l, busy: false, password: "" }));
@@ -477,7 +442,6 @@ export function App() {
           // Real setting: toggle sound. Beep on unmute so you hear it return.
           setMutedState((m) => {
             const next = !m;
-            setMuted(next);
             if (!next) sfx("accept");
             return next;
           });
