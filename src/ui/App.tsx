@@ -11,9 +11,11 @@ import type { MeshTransport, TransportStatus } from "@transport/index.ts";
 import { RelayClient, type InboundDecoded } from "@app/RelayClient.ts";
 import { applyActivity, createWisp, HEARTS, renameWisp, wispForm } from "@core/companion/index.ts";
 import { deriveIdentity, open, seal, type Identity } from "@core/identity/index.ts";
-import { SubType } from "@core/protocol/index.ts";
 import {
-  decodeDM, decodePresence, encodeDM, encodePresence, type Presence,
+  compareHlc, decodeHlc, encodeHlc, HybridLogicalClock, SubType, type HlcTimestamp,
+} from "@core/protocol/index.ts";
+import {
+  decodeDM, decodePresence, decodeRoomMsg, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM, type Presence,
 } from "@core/protocol/social.ts";
 import { loadWisp, saveWisp } from "@app/storage/wisp.ts";
 import { clearStoredIdentity, loadStoredIdentity, saveStoredIdentity } from "@app/storage/identity.ts";
@@ -80,6 +82,11 @@ export function App() {
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
   const [dmThreads, setDmThreads] = useState<Record<string, { out: boolean; text: string }[]>>({});
+  // Main chatroom (public, HLC-ordered). In-memory this session; persistence later.
+  interface RoomLine { ts: HlcTimestamp; senderFp: string; handle: string; text: string; mine: boolean }
+  const [roomMsgs, setRoomMsgs] = useState<RoomLine[]>([]);
+  const hlcRef = useRef(new HybridLogicalClock());
+  const seenRoomRef = useRef(new Set<string>()); // app-level dedupe of room messages
   // Refs so the inbound handler (bound once at connect) reads current values.
   const identityRef = useRef<Identity | null>(null);
   const buddiesRef = useRef<Buddy[]>(buddies);
@@ -213,6 +220,12 @@ export function App() {
       const text = new TextDecoder().decode(opened);
       setDmThreads((t) => ({ ...t, [env.senderFp]: [...(t[env.senderFp] ?? []), { out: false, text }] }));
       sfx("feed"); // soft chirp on an incoming DM
+    } else if (f.subtype === SubType.POST) {
+      const m = decodeRoomMsg(f.payload);
+      if (!m || m.roomId !== MAIN_ROOM || m.senderFp === me.fingerprint) return;
+      const ts = decodeHlc(m.hlc);
+      hlcRef.current.recv(ts); // keep our clock ahead of what we hear
+      ingestRoom({ ts, senderFp: m.senderFp, handle: m.handle, text: m.text, mine: false });
     }
   };
 
@@ -231,6 +244,28 @@ export function App() {
       addedAt: Date.now(),
     }));
     sfx("accept");
+  };
+
+  // Insert a room message (app-deduped, HLC-ordered).
+  const ingestRoom = (line: RoomLine) => {
+    const key = `${line.senderFp}:${line.ts.wallMs}.${line.ts.counter}`;
+    if (seenRoomRef.current.has(key)) return;
+    seenRoomRef.current.add(key);
+    setRoomMsgs((prev) => [...prev, line].sort((a, b) => compareHlc(a.ts, b.ts)).slice(-60));
+  };
+
+  const sendRoom = (text: string) => {
+    const me = identityRef.current;
+    const t = text.trim();
+    if (!t || !me) return;
+    if (clientRef.current?.status === "connected") {
+      const ts = hlcRef.current.send();
+      clientRef.current.send(SubType.POST, encodeRoomMsg(MAIN_ROOM, encodeHlc(ts), me.fingerprint, me.handle, t));
+      ingestRoom({ ts, senderFp: me.fingerprint, handle: me.handle, text: t, mine: true });
+      sfx("accept");
+    } else {
+      sfx("error");
+    }
   };
 
   const sendDM = (buddy: Buddy, text: string) => {
@@ -427,6 +462,11 @@ export function App() {
         }
         // STATUS just shows the link report (handled by selection rendering).
       }
+      if (place.id === "bcast") {
+        sfx("accept");
+        setEditing({ label: "MAIN ROOM", value: "", onSubmit: (v) => sendRoom(v) });
+        return;
+      }
       if (place.id === "profile") {
         if (item === "MY WISP") {
           sfx("accept");
@@ -518,6 +558,9 @@ export function App() {
                           }
                         : null,
                     }
+                  : undefined,
+                chat: nav.level === "place" && currentPlace(nav).id === "bcast"
+                  ? { title: "MAIN ROOM", messages: roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })) }
                   : undefined,
               }}
               onIcon={(index) => {

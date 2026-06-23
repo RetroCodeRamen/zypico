@@ -108,6 +108,8 @@ export interface ScreenModel {
   wispView: WispView | null;
   /** FRIENDS screen state (buddy list + open DM thread), when in that place. */
   friends?: FriendsView;
+  /** BROADCAST chatroom state, when in that place. */
+  chat?: ChatView;
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -118,6 +120,11 @@ export interface FriendsView {
   list: { kind: "buddy" | "nearby"; handle: string; fingerprint: string }[];
   cursor: number;
   thread: { title: string; messages: { out: boolean; text: string }[] } | null;
+}
+
+export interface ChatView {
+  title: string;
+  messages: { mine: boolean; who: string; text: string }[];
 }
 
 // The Wisp wanders the play area on a non-repeating path (layered sines), so it
@@ -337,6 +344,25 @@ function drawDmThread(buf: PixelBuffer, thread: NonNullable<FriendsView["thread"
   drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
 }
 
+/** BROADCAST — a public chatroom log; ACCEPT writes to the room. */
+export function drawChat(buf: PixelBuffer, v: ChatView): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, v.title.slice(0, 16), C.title);
+  drawText(buf, buf.width - measureText("ROOM") - 3, 2, "ROOM", C.tagRelay);
+  divider(buf, 9);
+  if (v.messages.length === 0) {
+    drawTextCentered(buf, 30, "NO MESSAGES YET", C.dim);
+    drawTextCentered(buf, 40, "ACCEPT TO WRITE", C.dim);
+  } else {
+    const maxChars = Math.floor((buf.width - 4) / CELL_W);
+    v.messages.slice(-7).forEach((m, i) => {
+      drawText(buf, 2, 12 + i * 7, `${m.who}:${m.text}`.slice(0, maxChars), m.mine ? C.textHi : C.text);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
+}
+
 export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel): void {
   if (model.editing) {
     drawEditor(buf, frame, model.editing);
@@ -354,5 +380,6 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   const place = currentPlace(nav);
   if (place.id === "radio") drawRadio(buf, place, nav, model.relay);
   else if (place.id === "friends" && model.friends) drawFriends(buf, model.friends);
+  else if (place.id === "bcast" && model.chat) drawChat(buf, model.chat);
   else drawPlace(buf, place, nav);
 }

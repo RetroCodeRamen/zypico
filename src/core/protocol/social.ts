@@ -78,3 +78,51 @@ export function decodeDM(payload: Uint8Array): DmEnvelope | null {
 function fingerprintOf(publicKey: Uint8Array): string {
   return bytesToHex(sha256(publicKey)).slice(0, 12);
 }
+
+// ---- Chatroom message: public, HLC-ordered (outline §5 boards; rides POST) ----
+// Layout: [roomId:1][hlc:8][senderFp:6][handleLen:1][handle][text].
+
+export const MAIN_ROOM = 0;
+const HLC_BYTES = 8;
+
+export function encodeRoomMsg(
+  roomId: number,
+  hlc: Uint8Array,
+  senderFp: string,
+  handle: string,
+  text: string,
+): Uint8Array {
+  const h = utf8(handle);
+  return concat(
+    Uint8Array.of(roomId & 0xff),
+    hlc,
+    fpToBytes(senderFp),
+    Uint8Array.of(h.length & 0xff),
+    h,
+    utf8(text),
+  );
+}
+
+export interface RoomMsg {
+  roomId: number;
+  /** 8-byte HLC timestamp (decode with decodeHlc for ordering). */
+  hlc: Uint8Array;
+  senderFp: string;
+  handle: string;
+  text: string;
+}
+
+export function decodeRoomMsg(payload: Uint8Array): RoomMsg | null {
+  let o = 0;
+  if (payload.length < 1 + HLC_BYTES + FP_LEN + 1) return null;
+  const roomId = payload[o++];
+  const hlc = payload.subarray(o, o + HLC_BYTES);
+  o += HLC_BYTES;
+  const senderFp = bytesToHex(payload.subarray(o, o + FP_LEN));
+  o += FP_LEN;
+  const handleLen = payload[o++];
+  if (payload.length < o + handleLen) return null;
+  const handle = fromUtf8(payload.subarray(o, o + handleLen));
+  o += handleLen;
+  return { roomId, hlc, senderFp, handle, text: fromUtf8(payload.subarray(o)) };
+}

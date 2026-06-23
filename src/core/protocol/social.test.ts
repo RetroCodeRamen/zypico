@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { deriveIdentity } from "@core/identity/index.ts";
-import { decodeDM, decodePresence, encodeDM, encodePresence } from "./social.ts";
+import { encodeHlc } from "./hlc.ts";
+import {
+  decodeDM, decodePresence, decodeRoomMsg, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM,
+} from "./social.ts";
 
 describe("presence beacon", () => {
   it("round-trips and verifies the signature", async () => {
@@ -34,5 +37,23 @@ describe("DM envelope", () => {
 
   it("rejects a too-short DM", () => {
     expect(decodeDM(new Uint8Array(4))).toBeNull();
+  });
+});
+
+describe("chatroom message", () => {
+  it("round-trips room id, hlc, sender, handle, and text", async () => {
+    const a = await deriveIdentity("Alice", "pw");
+    const hlc = encodeHlc({ wallMs: 1_718_000_000_000, counter: 3 });
+    const m = decodeRoomMsg(encodeRoomMsg(MAIN_ROOM, hlc, a.fingerprint, a.handle, "hello room"));
+    expect(m).not.toBeNull();
+    expect(m!.roomId).toBe(MAIN_ROOM);
+    expect(m!.senderFp).toBe(a.fingerprint);
+    expect(m!.handle).toBe("Alice");
+    expect(m!.text).toBe("hello room");
+    expect([...m!.hlc]).toEqual([...hlc]);
+  });
+
+  it("rejects a too-short room message", () => {
+    expect(decodeRoomMsg(new Uint8Array(8))).toBeNull();
   });
 });
