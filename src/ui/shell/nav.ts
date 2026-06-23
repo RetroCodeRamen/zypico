@@ -36,7 +36,7 @@ export const PLACES: PlaceDef[] = [
   { id: "post", label: "THE POST", scope: "relay", items: ["INBOX", "COMPOSE", "OUTBOX"] },
   { id: "pages", label: "PAGES", scope: "relay", items: ["MY PAGE", "BROWSE", "GUESTBOOK"] },
   { id: "wisp", label: "WISP", scope: "local", items: ["CARE"] },
-  { id: "arcade", label: "ARCADE", scope: "local", items: ["TIC-TAC-TOE", "CHESS", "SIGNAL MATCH"] },
+  { id: "arcade", label: "ARCADE", scope: "local", items: ["BOUNCER", "STARFIELD"] },
   { id: "exchange", label: "EXCHANGE", scope: "local", items: ["ITEMS", "THEMES", "CARTS"] },
   { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "VAULT", "RELAY", "SETTINGS"] },
 ];

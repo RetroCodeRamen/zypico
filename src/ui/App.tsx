@@ -19,6 +19,11 @@ import { useCompanion } from "@ui/hooks/useCompanion.ts";
 import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
+import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
+import { CartRunner } from "@ui/cart/CartRunner.ts";
+import { SAMPLE_CARTS } from "@ui/cart/samples.ts";
+// Bundle the Lua WASM as a local asset so Carts run offline on the board.
+import luaWasmUrl from "wasmoon/dist/glue.wasm?url";
 import { usePages } from "@ui/hooks/usePages.ts";
 import { usePageExchange } from "@ui/hooks/usePageExchange.ts";
 import { usePostOffice } from "@ui/hooks/usePostOffice.ts";
@@ -91,6 +96,35 @@ export function App() {
   };
   const vault = useVault(identity, link, reloadLocal);
   const [vaultView, setVaultView] = useState<VaultView | null>(null);
+
+  // A running Cart (the Arcade): runner null = still loading the Lua engine.
+  const [cart, setCart] = useState<{ runner: CartRunner | null; name: string } | null>(null);
+  const cartPressRef = useRef({ select: 0, accept: 0 }); // last tap times → momentary input
+
+  const launchCart = (name: string) => {
+    const sample = SAMPLE_CARTS.find((c) => c.name === name);
+    if (!sample) return;
+    sfx("accept");
+    cartPressRef.current = { select: 0, accept: 0 };
+    setCart({ runner: null, name });
+    void CartRunner.load(sample.code, luaWasmUrl).then((r) => {
+      setCart((cur) => (cur && cur.name === name && cur.runner === null ? { runner: r, name } : (r.dispose(), cur)));
+    });
+  };
+  const exitCart = () => { cart?.runner?.dispose(); setCart(null); };
+
+  // Draw the running Cart into the matrix, feeding it momentary button input.
+  const cartDraw = (buf: PixelBuffer, _frame: number) => {
+    const r = cart?.runner;
+    if (!r) { buf.clear(1); return; } // brief load
+    const now = Date.now();
+    r.setInput({
+      select: now - cartPressRef.current.select < 160,
+      accept: now - cartPressRef.current.accept < 160,
+      cancel: false,
+    });
+    r.render(buf);
+  };
 
   // Reached at login (after identity is derived, before the gate lifts).
   postAuthRef.current = (id: Identity) => {
@@ -167,6 +201,13 @@ export function App() {
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
   const handleButton = (action: ButtonAction) => {
     if (splash) { setSplash(false); sfx("select"); return; }
+    // A running Cart owns the buttons: CANCEL exits, SELECT/ACCEPT are its input.
+    if (cart) {
+      if (action === "cancel") exitCart();
+      else if (action === "select") cartPressRef.current.select = Date.now();
+      else if (action === "accept") cartPressRef.current.accept = Date.now();
+      return;
+    }
     if (!identity) {
       handleLoginButton(action);
       return;
@@ -379,6 +420,7 @@ export function App() {
         else if (item === "OUTBOX") setPostView({ panel: "outbox", cursor: 0 });
         return;
       }
+      if (place.id === "arcade") { launchCart(item); return; }
       if (place.id === "profile") {
         if (item === "RELAY") {
           // Ambient link control: report status (select) + re-link / drop.
@@ -461,6 +503,8 @@ export function App() {
     ? login.mode === "create"
       ? "TYPE · SELECT field · ACCEPT create"
       : "TYPE password · ACCEPT login · CANCEL switch"
+    : cart
+      ? "SELECT / ACCEPT play · CANCEL exit"
     : editing
       ? "TYPE · ACCEPT ok · CANCEL back"
       : wispView
@@ -502,6 +546,12 @@ export function App() {
             <div className="lcd">
               <div className="matrix">
                 <PixelScreen draw={drawSplash} fps={8} />
+              </div>
+            </div>
+          ) : cart ? (
+            <div className="lcd">
+              <div className="matrix">
+                <PixelScreen draw={cartDraw} fps={15} />
               </div>
             </div>
           ) : identity ? (
@@ -561,7 +611,7 @@ export function App() {
         </div>
         <Buttons onAction={handleButton} />
         <Keyboard
-          active={!splash && (!identity || editing !== null)}
+          active={!splash && !cart && (!identity || editing !== null)}
           onType={identity ? editType : loginType}
           onBackspace={identity ? editBackspace : loginBackspace}
           onEnter={() => handleButton("accept")}
