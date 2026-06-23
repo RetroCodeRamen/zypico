@@ -329,7 +329,11 @@ export function App() {
                     }
                   : undefined,
                 chat: nav.level === "place" && currentPlace(nav).id === "commons"
-                  ? { title: "COMMONS", messages: social.roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })) }
+                  ? {
+                      title: "COMMONS",
+                      messages: social.roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })),
+                      present: reachable.length,
+                    }
                   : undefined,
               }}
               onIcon={(index) => {
