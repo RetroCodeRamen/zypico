@@ -76,7 +76,8 @@ static bool showInfo = false;
 #define PEER_WINDOW_MS 300000UL // a device is "in range" if heard in the last 5 min
 static uint32_t peerIds[MAX_PEERS];
 static uint32_t peerLastMs[MAX_PEERS];
-static int peerRssi[MAX_PEERS]; // last-heard signal strength per peer (for the OLED)
+static int peerRssi[MAX_PEERS]; // last-heard signal strength per peer (dBm)
+static int peerSnr[MAX_PEERS];  // last-heard signal-to-noise per peer (dB)
 static int peerCount = 0;
 
 struct TxMsg {
@@ -88,19 +89,20 @@ static QueueHandle_t txQueue;
 static void drawSplashOled();
 static void drawInfo();
 
-// Record a directly-heard device (its MAC src) + its RSSI, newest wins.
-static void notePeer(uint32_t src, int rssi) {
+// Record a directly-heard device (its MAC src) + its RSSI/SNR, newest wins.
+static void notePeer(uint32_t src, int rssi, int snr) {
   uint32_t now = millis();
   for (int i = 0; i < peerCount; i++) {
-    if (peerIds[i] == src) { peerLastMs[i] = now; peerRssi[i] = rssi; return; }
+    if (peerIds[i] == src) { peerLastMs[i] = now; peerRssi[i] = rssi; peerSnr[i] = snr; return; }
   }
+  int slot;
   if (peerCount < MAX_PEERS) {
-    peerIds[peerCount] = src; peerLastMs[peerCount] = now; peerRssi[peerCount] = rssi; peerCount++;
+    slot = peerCount++;
   } else {
-    int oldest = 0;
-    for (int i = 1; i < MAX_PEERS; i++) if (peerLastMs[i] < peerLastMs[oldest]) oldest = i;
-    peerIds[oldest] = src; peerLastMs[oldest] = now; peerRssi[oldest] = rssi;
+    slot = 0;
+    for (int i = 1; i < MAX_PEERS; i++) if (peerLastMs[i] < peerLastMs[slot]) slot = i;
   }
+  peerIds[slot] = src; peerLastMs[slot] = now; peerRssi[slot] = rssi; peerSnr[slot] = snr;
 }
 
 
@@ -225,9 +227,10 @@ static void drawInfo() {
   if (n == 0) {
     oled.drawStr(2, 44, "(nobody heard yet)");
   } else {
+    // Per peer: !id  RSSI(dBm)  /SNR(dB, signed).
     int rows = n < MAX_ROWS ? n : MAX_ROWS;
     for (int i = 0; i < rows; i++) {
-      snprintf(line, sizeof(line), "!%x  %d dBm", peerIds[idx[i]], peerRssi[idx[i]]);
+      snprintf(line, sizeof(line), "!%x %d/%+ddB", peerIds[idx[i]], peerRssi[idx[i]], peerSnr[idx[i]]);
       oled.drawStr(2, 41 + i * 8, line);
     }
   }
@@ -258,11 +261,12 @@ void loop() {
                        ((uint32_t)buf[2] << 8) | buf[3];
         uint16_t seq = ((uint16_t)buf[4] << 8) | buf[5];
         float rssi = radio.getRSSI();
+        float snr = radio.getSNR();
         // Note: payload is BINARY (a RelayProtocol frame) — never print it as
         // text, or its bytes can mimic the 0xAA55 serial magic and desync a host.
-        Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f\n", src, seq, len, (double)rssi);
-        if (src != nodeId) {            // ignore our own echo
-          notePeer(src, (int)rssi);     // a ZyPico device heard directly = in range
+        Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f snr=%.1f\n", src, seq, len, (double)rssi, (double)snr);
+        if (src != nodeId) {                                // ignore our own echo
+          notePeer(src, (int)rssi, (int)roundf(snr));       // heard directly = in range
           ws.binaryAll(buf, len);       // forward [srcId][seq][payload] to the browser
           serialEmitFrame(buf, len);    // …and to the serial test harness
         }
