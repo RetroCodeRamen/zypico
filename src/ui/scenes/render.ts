@@ -25,7 +25,7 @@ import type { Discovery } from "@app/storage/discoveries.ts";
 import type { TravelerPage } from "@app/storage/page.ts";
 import type { GuestEntry } from "@app/storage/guestbook.ts";
 import type { InboxMail, OutboxMail } from "@app/storage/mail.ts";
-import type { PageMsg } from "@core/protocol/index.ts";
+import { SERVICE, type PageMsg } from "@core/protocol/index.ts";
 import { LOGO, LOGO_H, LOGO_TRANSPARENT, LOGO_W } from "@ui/pixel/logoBitmap.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
 
@@ -197,6 +197,9 @@ export interface ScreenModel {
   friends?: FriendsView;
   /** COMMONS chatroom state, when in that place. */
   chat?: ChatView;
+  /** COMMONS sub-panel: chat, or the discovered-Stations list (travel, §6.2). */
+  commonsPanel: "chat" | "stations";
+  stationList: StationRow[];
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -229,6 +232,14 @@ export interface ChatView {
   present: number;
   /** Stations heard nearby (infrastructure presence). */
   stations: number;
+}
+
+/** A discovered Station, for the Commons' Stations panel (DESIGN §5/§6.2). */
+export interface StationRow {
+  name: string;
+  services: number;
+  /** 0 = heard directly (Nearby), ≥1 = across the Relay. */
+  hops: number;
 }
 
 // The Wisp wanders the play area on a non-repeating path (layered sines), so it
@@ -783,6 +794,36 @@ function drawDmThread(buf: PixelBuffer, thread: NonNullable<FriendsView["thread"
   }
 }
 
+// Compact service letters for a Station row, e.g. "RMPC" (Repeat/Mail/Pages/Commons).
+function serviceLetters(services: number): string {
+  return [
+    [SERVICE.REPEAT, "R"], [SERVICE.MAIL, "M"], [SERVICE.PAGES, "P"],
+    [SERVICE.COMMONS, "C"], [SERVICE.VAULT, "V"], [SERVICE.GATEWAY, "G"],
+  ].filter(([bit]) => services & (bit as number)).map(([, l]) => l).join("");
+}
+
+/** THE COMMONS → STATIONS: discovered Stations + their services (travel surface). */
+export function drawStations(buf: PixelBuffer, list: StationRow[]): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "STATIONS", C.title);
+  drawText(buf, buf.width - measureText("REL") - 3, 2, "REL", C.tagRelay);
+  divider(buf, 9);
+  if (list.length === 0) {
+    drawTextCentered(buf, 30, "NO STATIONS HEARD", C.dim);
+    drawTextCentered(buf, 40, "THE RELAY RUNS WITHOUT THEM", C.dim);
+  } else {
+    list.slice(0, 6).forEach((s, i) => {
+      const y = 13 + i * 9;
+      drawText(buf, 2, y, s.name.toUpperCase().slice(0, 12), C.ok);
+      const via = s.hops === 0 ? "NEAR" : "RLY";
+      drawText(buf, buf.width - measureText(via) - 3, y, via, s.hops === 0 ? C.ok : C.tagRelay);
+      drawText(buf, 78, y, serviceLetters(s.services), C.dim);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "SELECT chat  CANCEL back", C.dim);
+}
+
 /** THE COMMONS — a public chatroom log with a live presence count; ACCEPT writes. */
 export function drawChat(buf: PixelBuffer, v: ChatView): void {
   buf.clear(C.bg);
@@ -844,6 +885,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   const place = currentPlace(nav);
   if (place.id === "travelers" && model.friends) drawFriends(buf, model.friends);
+  else if (place.id === "commons" && model.commonsPanel === "stations") drawStations(buf, model.stationList);
   else if (place.id === "commons" && model.chat) drawChat(buf, model.chat);
   else if (place.id === "profile") drawProfile(buf, place, nav, model.relay, model.muted);
   else drawPlace(buf, place, nav);

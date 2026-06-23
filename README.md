@@ -92,6 +92,28 @@ sg dialout -c "npx vite-node tools/harness/presence.ts"    # minimal example
 (Boards must be flashed with current firmware; ports default to
 `/dev/ttyUSB0` + `/dev/ttyUSB1`, override with `PORT_A` / `PORT_B`.)
 
+Other harness scripts validate each subsystem over real LoRa: `pages.ts`,
+`mail.ts`, `station.ts`, `store-forward.ts`, `page-host.ts`,
+`commons-history.ts`, `vault.ts`.
+
+## Running a Station
+
+A **Station** (DESIGN §3) is a persistent node wired to a Heltec over USB that
+provides infrastructure: multi-hop repeating, **Mail store-and-forward**,
+**Page hosting**, **Commons memory**, and encrypted **Account Vault** backups.
+It runs the real `RelayClient`; Travelers discover it via its signed beacon and
+see it under **The Commons → (SELECT) Stations**.
+
+```bash
+# The name + password are the Station's admin credentials (a separate identity
+# from any Traveler). Persistent — Ctrl-C to stop.
+sg dialout -c "ZYPICO_STATION_NAME=HarborLight ZYPICO_STATION_PW=secret \
+  ZYPICO_STATION_PORT=/dev/ttyUSB0 npx vite-node tools/station/station.ts"
+```
+Config (env): `ZYPICO_STATION_NAME`, `ZYPICO_STATION_PW` (admin), `ZYPICO_STATION_PORT`,
+`ZYPICO_STATION_SERVICES` (e.g. `mail,pages,commons,vault`), `ZYPICO_STATION_STORE`
+(held mail/pages/commons/vaults are persisted, encrypted-at-rest where applicable).
+
 ## Regenerating the logo
 
 The LCD splash and OLED logo are generated from `img/logo.png` (committed, so

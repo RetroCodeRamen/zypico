@@ -25,9 +25,15 @@ const NAME = process.env.ZYPICO_STATION_NAME ?? "HarborLight";
 const ADMIN_PW = process.env.ZYPICO_STATION_PW ?? "change-me"; // admin creds (separate from any Traveler)
 const BEACON_MS = 60_000;
 
-// Services this Station offers. REPEAT is inherent (every board repeats); the
-// rest are wired up across the M7 slices.
-const SERVICES = SERVICE.REPEAT | SERVICE.MAIL | SERVICE.PAGES | SERVICE.COMMONS;
+// Services this Station offers — admin-configurable via ZYPICO_STATION_SERVICES
+// (comma list, e.g. "mail,pages,commons"); defaults to everything we implement.
+const SERVICE_BY_NAME: Record<string, number> = {
+  repeat: SERVICE.REPEAT, mail: SERVICE.MAIL, pages: SERVICE.PAGES,
+  commons: SERVICE.COMMONS, vault: SERVICE.VAULT, gateway: SERVICE.GATEWAY,
+};
+const SERVICES = process.env.ZYPICO_STATION_SERVICES
+  ? process.env.ZYPICO_STATION_SERVICES.split(",").reduce((m, n) => m | (SERVICE_BY_NAME[n.trim().toLowerCase()] ?? 0), 0)
+  : SERVICE.REPEAT | SERVICE.MAIL | SERVICE.PAGES | SERVICE.COMMONS | SERVICE.VAULT;
 
 const log = (s: string) => process.stderr.write(`[station] ${s}\n`);
 

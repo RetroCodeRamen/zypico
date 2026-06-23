@@ -69,6 +69,7 @@ export function App() {
   }));
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
+  const [commonsPanel, setCommonsPanel] = useState<"chat" | "stations">("chat"); // Commons sub-view
 
   // Your Traveler Page (local-first; per-identity) + the PAGES overlay, plus the
   // peer-to-peer page exchange (serve/fetch over the mesh).
@@ -150,6 +151,7 @@ export function App() {
       })),
   ];
   const inFriends = identity != null && nav.level === "place" && currentPlace(nav).id === "travelers";
+  const inCommons = identity != null && nav.level === "place" && currentPlace(nav).id === "commons";
 
   // Reset the TRAVELERS cursor/thread whenever we enter that place.
   useEffect(() => {
@@ -158,6 +160,9 @@ export function App() {
       setFriendsThread(null);
     }
   }, [inFriends]);
+
+  // Default the Commons to chat each time you enter it.
+  useEffect(() => { if (inCommons) setCommonsPanel("chat"); }, [inCommons]);
 
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
   const handleButton = (action: ButtonAction) => {
@@ -335,14 +340,23 @@ export function App() {
       return;
     }
 
+    // COMMONS: SELECT toggles chat ↔ the Stations list (travel, §6.2); ACCEPT
+    // writes a message (chat panel only).
+    if (inCommons) {
+      if (action === "select") { setCommonsPanel((p) => (p === "chat" ? "stations" : "chat")); return; }
+      if (action === "accept") {
+        if (commonsPanel === "chat") {
+          sfx("accept");
+          setEditing({ label: "COMMONS", value: "", onSubmit: (v) => social.sendRoom(v) });
+        }
+        return;
+      }
+      if (action === "cancel") { setCommonsPanel("chat"); navDispatch("cancel"); return; }
+    }
+
     if (action === "accept" && nav.level === "place") {
       const place = currentPlace(nav);
       const item = place.items[nav.itemIndex];
-      if (place.id === "commons") {
-        sfx("accept");
-        setEditing({ label: "COMMONS", value: "", onSubmit: (v) => social.sendRoom(v) });
-        return;
-      }
       if (place.id === "pages" && item === "MY PAGE") {
         sfx("accept");
         setPageView({ panel: "mine", cursor: 0 });
@@ -473,7 +487,11 @@ export function App() {
           ? "ACCEPT write · CANCEL back"
           : inFriends
             ? "SELECT move · ACCEPT add/open · CANCEL back"
-            : "SELECT move · ACCEPT enter · CANCEL back";
+            : inCommons
+              ? commonsPanel === "stations"
+                ? "SELECT chat · CANCEL back"
+                : "SELECT stations · ACCEPT write · CANCEL back"
+              : "SELECT move · ACCEPT enter · CANCEL back";
 
   return (
     <div className="stage" ref={stageRef}>
@@ -518,6 +536,10 @@ export function App() {
                       stations: social.stations.filter((s) => Date.now() - s.lastSeen < 300_000).length,
                     }
                   : undefined,
+                commonsPanel,
+                stationList: social.stations
+                  .filter((s) => Date.now() - s.lastSeen < 300_000)
+                  .map((s) => ({ name: s.name, services: s.services, hops: s.hops })),
               }}
               onIcon={(index) => {
                 sfx("accept");
