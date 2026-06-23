@@ -6,7 +6,7 @@ _Status: draft v1 · Last updated 2026-06-20_
 
 **Related docs:** [docs/DESIGN.md](docs/DESIGN.md) (**canonical design direction, v3** — read first) · [The-Relay-Outline-v2.md](The-Relay-Outline-v2.md) (background mechanics; superseded by DESIGN for direction) · [The-Relay-Screens.html](The-Relay-Screens.html) (visual reference) · [docs/protocol.md](docs/protocol.md) (RelayProtocol wire spec) · [docs/adr/](docs/adr/) (decision records).
 
-**Build progress (last updated 2026-06-23 · 104 unit tests passing):**
+**Build progress (last updated 2026-06-23 · 111 unit tests passing):**
 
 **Deployment shape (settled — ADR 0004).** ZyPico runs on the **device itself**: a
 **Heltec WiFi LoRa 32 V3** flashed with custom firmware (`firmware/heltec-v3/`)
@@ -38,9 +38,19 @@ Web Bluetooth, HTTP-to-node) were removed in the cleanup — see git history / A
   LoRa (firmware gained a magic-framed binary serial channel for it). **ZyPico
   logo** added: LCD boot splash + OLED logo (USER button toggles to an info
   screen showing devices in range); assets generated from `img/logo.png` by
-  `npm run gen:logo`. **README** with a quick-start guide.
+  `npm run gen:logo`. **README** with a quick-start guide. **RSSI + SNR** per-node
+  on the OLED info screen (range/walk tests).
+- **M5 — Traveler Pages + Guestbooks (done 2026-06-23).** Author a small page
+  (tagline + about, local-first); **fetch + view** a reachable Traveler's signed
+  page over the mesh (PAGE_REQ/PAGE, TOFU-verified); **sign guestbooks** (delivered
+  to the owner, shown on their page). Verified over real LoRa (`tools/harness/pages.ts`).
+- **M6 — Chat vs Mail split (done 2026-06-23, pre-Station).** **The Post**: Mail
+  (compose → outbox → delivered when the recipient is reachable; E2E-sealed; inbox/
+  outbox persist) — verified over real LoRa (`tools/harness/mail.ts`). **Chat
+  reachability-gated**: a DM to an unreachable Traveler offers Mail instead (never
+  silent). Commons history ~10. _Mail store-and-forward between Stations lands in M7._
 
-**Next:** **M5 — Traveler Pages + Guestbooks** (author/edit a small page; browse others'; sign a guestbook). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults (M7) need it.
+**Next:** **M7 — Stations** (Station Mode on Heltec: admin login, Mail relay/store-and-forward, Page hosting, Account Vaults, Commons memory to ~50). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults need it.
 
 **Design status:** the spec is build-ready. Identity/crypto, transport/mesh, companion model, sandbox, and the visual system are all decided. Four screens are designed and the surface grammar is proven. Remaining unknowns are best resolved during implementation, not further outlining.
 
