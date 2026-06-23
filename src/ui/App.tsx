@@ -19,6 +19,7 @@ import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
 import { usePages } from "@ui/hooks/usePages.ts";
+import { usePageExchange } from "@ui/hooks/usePageExchange.ts";
 
 // Hearts are earned through participation, never picked at will (DESIGN §2) —
 // real activity hooks grant them. CAN_RAISE now only gates a dev-only RESET in
@@ -66,9 +67,11 @@ export function App() {
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
 
-  // Your Traveler Page (local-first; per-identity) + the PAGES editor overlay.
+  // Your Traveler Page (local-first; per-identity) + the PAGES overlay, plus the
+  // peer-to-peer page exchange (serve/fetch over the mesh).
   const { myPage, load: loadPages, setTagline, setAbout } = usePages(identity?.fingerprint ?? null);
   const [pageView, setPageView] = useState<PageView | null>(null);
+  const pageExchange = usePageExchange(identity, link, () => myPage);
 
   // Reached at login (after identity is derived, before the gate lifts).
   postAuthRef.current = (id: Identity) => {
@@ -104,6 +107,14 @@ export function App() {
   // Reachable Travelers = heard within the 5-min window (DESIGN §4.2). Stale
   // beacons drop off so the world reflects who's actually around.
   const reachable = social.nearby.filter((n) => Date.now() - n.lastSeen < 300_000);
+
+  // Travelers whose page we can fetch right now: buddies + reachable (deduped).
+  const pageBrowse: { handle: string; fingerprint: string }[] = [
+    ...social.buddies.map((b) => ({ handle: b.petname ?? b.handle, fingerprint: b.fingerprint })),
+    ...reachable
+      .filter((n) => !social.buddies.some((b) => b.fingerprint === n.fingerprint))
+      .map((n) => ({ handle: n.handle, fingerprint: n.fingerprint })),
+  ];
 
   // TRAVELERS: buddies (added) first, then reachable nearby/relay (not yet added).
   // `via` distinguishes Nearby (direct) from Relay (heard across hops), §4.1.
@@ -186,19 +197,34 @@ export function App() {
       return;
     }
 
-    // PAGES → MY PAGE editor: SELECT moves between fields, ACCEPT edits one.
+    // PAGES overlay: edit your page, browse reachable Travelers, or read a page.
     if (pageView) {
-      if (action === "select") {
-        setPageView({ panel: "mine", cursor: (pageView.cursor + 1) % 2 });
-      } else if (action === "accept") {
-        if (pageView.cursor === 0) {
-          setEditing({ label: "TAGLINE", value: myPage.tagline, onSubmit: setTagline });
-        } else {
-          setEditing({ label: "ABOUT", value: myPage.about, onSubmit: setAbout });
+      if (pageView.panel === "mine") {
+        if (action === "select") {
+          setPageView({ panel: "mine", cursor: (pageView.cursor + 1) % 2 });
+        } else if (action === "accept") {
+          if (pageView.cursor === 0) setEditing({ label: "TAGLINE", value: myPage.tagline, onSubmit: setTagline });
+          else setEditing({ label: "ABOUT", value: myPage.about, onSubmit: setAbout });
+        } else if (action === "cancel") {
+          setPageView(null);
+          navDispatch("cancel");
         }
-      } else if (action === "cancel") {
-        setPageView(null);
-        navDispatch("cancel"); // leave the Pages place, back to home
+      } else if (pageView.panel === "browse") {
+        if (action === "select") {
+          setPageView({ panel: "browse", cursor: pageBrowse.length ? (pageView.cursor + 1) % pageBrowse.length : 0 });
+        } else if (action === "accept") {
+          const it = pageBrowse[pageView.cursor];
+          if (it) {
+            sfx("accept");
+            pageExchange.requestPage(it.fingerprint); // owner serves it back over the mesh
+            setPageView({ panel: "view", cursor: 0, fp: it.fingerprint });
+          }
+        } else if (action === "cancel") {
+          setPageView(null);
+          navDispatch("cancel");
+        }
+      } else { // view
+        if (action === "cancel") setPageView({ panel: "browse", cursor: 0 });
       }
       return;
     }
@@ -252,6 +278,11 @@ export function App() {
       if (place.id === "pages" && item === "MY PAGE") {
         sfx("accept");
         setPageView({ panel: "mine", cursor: 0 });
+        return;
+      }
+      if (place.id === "pages" && item === "BROWSE") {
+        sfx("accept");
+        setPageView({ panel: "browse", cursor: 0 });
         return;
       }
       if (place.id === "profile") {
@@ -338,7 +369,11 @@ export function App() {
           ? "CANCEL back to care"
           : "SELECT move · ACCEPT do · CANCEL back"
         : pageView
-          ? "SELECT move · ACCEPT edit · CANCEL back"
+          ? pageView.panel === "view"
+            ? "CANCEL back"
+            : pageView.panel === "browse"
+              ? "SELECT move · ACCEPT view · CANCEL back"
+              : "SELECT move · ACCEPT edit · CANCEL back"
         : inFriends && friendsThread
           ? "ACCEPT write · CANCEL back"
           : inFriends
@@ -361,7 +396,9 @@ export function App() {
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
-                pageView, myPage, nearbyCount: reachable.length,
+                pageView, myPage, pageBrowse,
+                pageViewed: pageView?.panel === "view" && pageView.fp ? pageExchange.pages[pageView.fp] ?? null : null,
+                nearbyCount: reachable.length,
                 friends: inFriends
                   ? {
                       list: friendList,

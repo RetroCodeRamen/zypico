@@ -23,6 +23,7 @@ import {
 } from "@core/companion/index.ts";
 import type { Discovery } from "@app/storage/discoveries.ts";
 import type { TravelerPage } from "@app/storage/page.ts";
+import type { PageMsg } from "@core/protocol/index.ts";
 import { LOGO, LOGO_H, LOGO_TRANSPARENT, LOGO_W } from "@ui/pixel/logoBitmap.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
 
@@ -74,10 +75,12 @@ export interface WispView {
 }
 
 /** The PAGES place overlay. `mine` = edit your Traveler Page (cursor: 0 tagline,
- * 1 about). Viewing others' pages + guestbooks land in later M5 slices. */
+ * 1 about); `browse` = pick a reachable Traveler; `view` = read their page. */
 export interface PageView {
-  panel: "mine";
+  panel: "mine" | "browse" | "view";
   cursor: number;
+  /** Whose page is open (panel "view"). */
+  fp?: string;
 }
 
 /** Settled mood summary handed to the renderer (kept pure — App owns the clock). */
@@ -150,10 +153,14 @@ export interface ScreenModel {
   relay: RelayView;
   wisp: Wisp;
   wispView: WispView | null;
-  /** PAGES overlay (edit your Traveler Page), when open. */
+  /** PAGES overlay (edit/browse/view), when open. */
   pageView: PageView | null;
   /** Your Traveler Page (for the PAGES editor). */
   myPage: TravelerPage;
+  /** Reachable Travelers whose pages you can fetch (PAGES → browse). */
+  pageBrowse: { handle: string; fingerprint: string }[];
+  /** The page being viewed (PAGES → view), or null while it's still fetching. */
+  pageViewed: PageMsg | null;
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
   /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
@@ -529,6 +536,48 @@ export function drawPageMine(buf: PixelBuffer, page: TravelerPage, view: PageVie
   drawTextCentered(buf, 73, "ACCEPT EDIT  CANCEL BACK", C.dim);
 }
 
+/** PAGES → BROWSE: pick a reachable Traveler whose page to fetch. */
+export function drawPageBrowse(buf: PixelBuffer, list: { handle: string }[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "BROWSE PAGES", C.title);
+  drawText(buf, buf.width - measureText("REL") - 3, 2, "REL", C.tagRelay);
+  divider(buf, 9);
+  if (list.length === 0) {
+    drawTextCentered(buf, 30, "NOBODY AROUND", C.dim);
+    drawTextCentered(buf, 40, "PAGES NEED A TRAVELER", C.dim);
+  } else {
+    list.slice(0, 8).forEach((it, i) => {
+      const y = 13 + i * 7;
+      const hi = i === cursor;
+      if (hi) drawText(buf, 1, y, ">", C.cursor);
+      drawText(buf, 7, y, it.handle.toUpperCase().slice(0, 20), hi ? C.textHi : C.text);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT VIEW  CANCEL BACK", C.dim);
+}
+
+/** PAGES → VIEW: read a fetched Traveler Page (or wait for it to arrive). */
+export function drawPageView(buf: PixelBuffer, page: PageMsg | null): void {
+  buf.clear(C.bg);
+  if (!page) {
+    drawText(buf, 3, 2, "PAGE", C.title);
+    divider(buf, 9);
+    drawTextCentered(buf, 34, "FETCHING...", C.dim);
+    drawTextCentered(buf, 44, "(MUST BE REACHABLE)", C.dim);
+    return;
+  }
+  drawText(buf, 3, 2, page.handle.toUpperCase().slice(0, 16), C.title);
+  drawText(buf, buf.width - measureText("PAGE") - 3, 2, "PAGE", C.tagRelay);
+  divider(buf, 9);
+  drawText(buf, 3, 14, page.tagline || "(no tagline)", page.tagline ? C.ok : C.dim);
+  divider(buf, 22);
+  const lines = page.about ? wrapText(page.about, Math.floor((buf.width - 6) / CELL_W)) : ["(no about yet)"];
+  lines.slice(0, 6).forEach((ln, i) => drawText(buf, 3, 28 + i * 7, ln, page.about ? C.text : C.dim));
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
+}
+
 /** FRIENDS — buddy list (added first, then nearby with an ADD hint). */
 export function drawFriends(buf: PixelBuffer, v: FriendsView): void {
   if (v.thread) {
@@ -610,7 +659,9 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     return;
   }
   if (model.pageView) {
-    drawPageMine(buf, model.myPage, model.pageView);
+    if (model.pageView.panel === "browse") drawPageBrowse(buf, model.pageBrowse, model.pageView.cursor);
+    else if (model.pageView.panel === "view") drawPageView(buf, model.pageViewed);
+    else drawPageMine(buf, model.myPage, model.pageView);
     return;
   }
   const { nav } = model;

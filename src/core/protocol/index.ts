@@ -16,6 +16,16 @@ export {
 } from "./frame.ts";
 export { isKnownSubType, SubType, subTypeName } from "./subtypes.ts";
 export {
+  decodeGuestbook,
+  decodePage,
+  decodePageReq,
+  encodeGuestbook,
+  encodePage,
+  encodePageReq,
+  type GuestbookMsg,
+  type PageMsg,
+} from "./pages.ts";
+export {
   compareHlc,
   decodeHlc,
   encodeHlc,

@@ -15,6 +15,9 @@ export enum SubType {
   // communities
   POST = 0x20,
   CLUB_MSG = 0x21,
+  PAGE_REQ = 0x22,  // ask a Traveler for their Page
+  PAGE = 0x23,      // serve a (signed) Traveler Page
+  GUESTBOOK = 0x24, // sign a Traveler's guestbook
 
   // play
   GAME_INVITE = 0x30,

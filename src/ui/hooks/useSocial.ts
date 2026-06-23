@@ -123,11 +123,8 @@ export function useSocial(
     }
   };
 
-  // Bind the inbound handler once; it reads current state through refs.
-  useEffect(() => {
-    link.setInbound(handleInbound);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Subscribe the inbound handler once; it reads current state through refs.
+  useEffect(() => link.onInbound(handleInbound), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const broadcastPresence = () => {
     const me = identityRef.current;

@@ -21,7 +21,8 @@ export function useRelay() {
   const [view, setView] = useState<RelayView>({ statusLabel: "OFFLINE", online: false });
   const clientRef = useRef<RelayClient | undefined>(undefined);
   const viaRef = useRef<string | undefined>(undefined); // how we're linked (for STATUS)
-  const inboundRef = useRef<(f: InboundDecoded) => void>(() => {});
+  // Multiple domain layers (social, page exchange, …) each subscribe to inbound.
+  const handlersRef = useRef(new Set<(f: InboundDecoded) => void>());
 
   const refreshView = (client: RelayClient, status: TransportStatus) => {
     const node = client.selfNodeNum;
@@ -40,7 +41,7 @@ export function useRelay() {
     const client = new RelayClient(transport);
     clientRef.current = client;
     client.onStatus((s) => refreshView(client, s));
-    client.onInbound((f) => inboundRef.current(f));
+    client.onInbound((f) => { for (const h of handlersRef.current) h(f); });
     setView({ statusLabel: "CONNECTING...", online: false, via });
     try {
       await client.connect();
@@ -69,7 +70,10 @@ export function useRelay() {
     view,
     connectBoard,
     disconnect,
-    setInbound: (fn: (f: InboundDecoded) => void) => { inboundRef.current = fn; },
+    onInbound: (fn: (f: InboundDecoded) => void) => {
+      handlersRef.current.add(fn);
+      return () => { handlersRef.current.delete(fn); };
+    },
     isConnected: () => clientRef.current?.status === "connected",
     send: (subtype: SubType, payload: Uint8Array) => clientRef.current?.send(subtype, payload),
   };
