@@ -145,7 +145,11 @@ export interface ScreenModel {
 }
 
 export interface FriendsView {
-  list: { kind: "buddy" | "nearby"; handle: string; fingerprint: string }[];
+  list: {
+    kind: "buddy" | "nearby"; handle: string; fingerprint: string;
+    /** How a not-yet-added Traveler was heard (DESIGN §4.1). */
+    via?: "nearby" | "relay";
+  }[];
   cursor: number;
   thread: { title: string; messages: { out: boolean; text: string }[] } | null;
 }
@@ -480,19 +484,23 @@ export function drawFriends(buf: PixelBuffer, v: FriendsView): void {
     return;
   }
   buf.clear(C.bg);
-  drawText(buf, 3, 2, "FRIENDS", C.title);
+  drawText(buf, 3, 2, "TRAVELERS", C.title);
   drawText(buf, buf.width - measureText("REL") - 3, 2, "REL", C.tagRelay);
   divider(buf, 9);
   if (v.list.length === 0) {
-    drawTextCentered(buf, 30, "NOBODY NEARBY YET", C.dim);
+    drawTextCentered(buf, 30, "NOBODY AROUND YET", C.dim);
     drawTextCentered(buf, 40, "WAITING FOR PRESENCE", C.dim);
   } else {
     v.list.slice(0, 8).forEach((it, i) => {
       const y = 13 + i * 7;
       const hi = i === v.cursor;
       if (hi) drawText(buf, 1, y, ">", C.cursor);
-      drawText(buf, 7, y, it.handle.toUpperCase().slice(0, 20), hi ? C.textHi : it.kind === "buddy" ? C.text : C.ok);
-      if (it.kind === "nearby") drawText(buf, buf.width - measureText("ADD") - 3, y, "ADD", C.ok);
+      drawText(buf, 7, y, it.handle.toUpperCase().slice(0, 14), hi ? C.textHi : it.kind === "buddy" ? C.text : C.ok);
+      // Not-yet-added Travelers show how they were heard + an ADD hint.
+      if (it.kind === "nearby") {
+        const tag = it.via === "relay" ? "RELAY" : "NEAR";
+        drawText(buf, buf.width - measureText(`${tag} +`) - 3, y, `${tag} +`, it.via === "relay" ? C.tagRelay : C.ok);
+      }
     });
   }
   buf.fillRect(0, 72, buf.width, 8, C.ground);

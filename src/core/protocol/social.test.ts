@@ -6,19 +6,28 @@ import {
 } from "./social.ts";
 
 describe("presence beacon", () => {
-  it("round-trips and verifies the signature", async () => {
+  it("round-trips identity, Wisp form, and location, verifying the signature", async () => {
     const id = await deriveIdentity("WonkyTanuki", "pw");
-    const p = decodePresence(encodePresence(id));
+    const p = decodePresence(encodePresence(id, 7, 0)); // form 7, in The Commons
     expect(p).not.toBeNull();
     expect(p!.handle).toBe("WonkyTanuki");
     expect(p!.fingerprint).toBe(id.fingerprint);
     expect([...p!.publicKey]).toEqual([...id.publicKey]);
+    expect(p!.formIndex).toBe(7);
+    expect(p!.placeId).toBe(0);
   });
 
   it("rejects a beacon with a forged signature", async () => {
     const id = await deriveIdentity("Tanuki", "pw");
-    const bytes = encodePresence(id);
+    const bytes = encodePresence(id, 0, 0xff);
     bytes[40] ^= 0xff; // corrupt a signature byte
+    expect(decodePresence(bytes)).toBeNull();
+  });
+
+  it("rejects a beacon whose form/location was tampered after signing", async () => {
+    const id = await deriveIdentity("Tanuki", "pw");
+    const bytes = encodePresence(id, 3, 2);
+    bytes[bytes.length - 1] ^= 0xff; // flip the placeId byte (covered by the sig)
     expect(decodePresence(bytes)).toBeNull();
   });
 });

@@ -22,6 +22,19 @@ import type { Relay } from "@ui/hooks/useRelay.ts";
 
 const roomKey = (line: RoomLine) => `${line.senderFp}:${line.ts.wallMs}.${line.ts.counter}`;
 
+const PRESENCE_INTERVAL = 60_000; // DESIGN §4.1 — beacon every 60 s
+
+/** What a presence beacon should advertise right now (Wisp form + location). */
+export interface PresenceMeta { formIndex: number; placeId: number }
+
+/** A heard Traveler: their beacon plus how/when we heard it. */
+export interface NearbyTraveler extends Presence {
+  /** Epoch ms we last heard them (for the 5-min reachability window). */
+  lastSeen: number;
+  /** Hops travelled: 0 = Nearby (direct radio), ≥1 = across the Relay. */
+  hops: number;
+}
+
 // The social layer: presence (who's around), buddies, encrypted DMs, and the
 // HLC-ordered main chatroom. Reads/sends through the Relay link; persists
 // buddies per-identity. The inbound handler is bound once and reads current
@@ -30,9 +43,10 @@ export function useSocial(
   identity: Identity | null,
   link: Relay,
   onActivity: (heart: Heart, amount: number) => void,
+  presenceMeta: () => PresenceMeta,
 ) {
   const [buddies, setBuddies] = useState<Buddy[]>([]);
-  const [nearby, setNearby] = useState<Presence[]>([]);
+  const [nearby, setNearby] = useState<NearbyTraveler[]>([]);
   const [dmThreads, setDmThreads] = useState<DmThreads>({});
   const [roomMsgs, setRoomMsgs] = useState<RoomLine[]>([]);
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]); // the Wisp's journal
@@ -42,10 +56,12 @@ export function useSocial(
   // Refs so the inbound handler (bound once) reads current values.
   const identityRef = useRef<Identity | null>(null);
   const buddiesRef = useRef<Buddy[]>(buddies);
-  const nearbyRef = useRef<Presence[]>(nearby);
+  const nearbyRef = useRef<NearbyTraveler[]>(nearby);
+  const metaRef = useRef(presenceMeta);
   identityRef.current = identity;
   buddiesRef.current = buddies;
   nearbyRef.current = nearby;
+  metaRef.current = presenceMeta;
 
   useEffect(() => {
     if (identity) saveBuddies(identity.fingerprint, buddies);
@@ -81,7 +97,8 @@ export function useSocial(
       const p = decodePresence(f.payload);
       if (!p || p.fingerprint === me.fingerprint) return; // ignore self / forged
       const isNew = !nearbyRef.current.some((x) => x.fingerprint === p.fingerprint);
-      setNearby((prev) => [...prev.filter((x) => x.fingerprint !== p.fingerprint), p].slice(-30));
+      const entry: NearbyTraveler = { ...p, lastSeen: Date.now(), hops: f.hops };
+      setNearby((prev) => [...prev.filter((x) => x.fingerprint !== p.fingerprint), entry].slice(-30));
       if (isNew) {
         onActivity("journey", 2); // discovering the world grows Journey
         // The Wisp notices the passing Traveler and remembers it (DESIGN §2).
@@ -114,14 +131,17 @@ export function useSocial(
 
   const broadcastPresence = () => {
     const me = identityRef.current;
-    if (me && link.isConnected()) link.send(SubType.PRESENCE, encodePresence(me));
+    if (me && link.isConnected()) {
+      const meta = metaRef.current();
+      link.send(SubType.PRESENCE, encodePresence(me, meta.formIndex, meta.placeId));
+    }
   };
 
   // Announce presence on connect and periodically, so others discover us.
   useEffect(() => {
     if (!identity || !link.view.online) return;
     broadcastPresence();
-    const iv = setInterval(broadcastPresence, 30_000);
+    const iv = setInterval(broadcastPresence, PRESENCE_INTERVAL);
     return () => clearInterval(iv);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [identity, link.view.online]);

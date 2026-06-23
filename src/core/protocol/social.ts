@@ -26,18 +26,31 @@ export function fpToBytes(fingerprint: string): Uint8Array {
 }
 
 // ---- Presence beacon: who I am, signed so a hearer knows I hold the key ----
-// Layout: [pubkey:32][sig:64 over pubkey‖handle][handleLen:1][handle].
+// (DESIGN §4.1: carries handle, fingerprint, Wisp form + current location.)
+// Layout: [pubkey:32][sig:64 over pubkey‖handle‖meta][handleLen:1][handle][meta:2]
+//   meta = [formIndex:1][placeId:1]  (placeId 0xff = home/with the Wisp)
+//
+// The world speaks in people, never node tech — a beacon shows who someone is and
+// where in the Relay they are, not radio internals.
 
-export function encodePresence(identity: Identity): Uint8Array {
+export const PLACE_HOME = 0xff;
+const META_LEN = 2;
+
+export function encodePresence(identity: Identity, formIndex: number, placeId: number): Uint8Array {
   const handle = utf8(identity.handle);
-  const sig = sign(identity, concat(identity.publicKey, handle));
-  return concat(identity.publicKey, sig, Uint8Array.of(handle.length & 0xff), handle);
+  const meta = Uint8Array.of(formIndex & 0xff, placeId & 0xff);
+  const sig = sign(identity, concat(identity.publicKey, handle, meta));
+  return concat(identity.publicKey, sig, Uint8Array.of(handle.length & 0xff), handle, meta);
 }
 
 export interface Presence {
   handle: string;
   publicKey: Uint8Array;
   fingerprint: string;
+  /** Wisp form (wire index — see companion FORM_ORDER). */
+  formIndex: number;
+  /** Where in the Relay they are (Place index, or PLACE_HOME). */
+  placeId: number;
 }
 
 export function decodePresence(payload: Uint8Array): Presence | null {
@@ -46,10 +59,17 @@ export function decodePresence(payload: Uint8Array): Presence | null {
   const sig = payload.subarray(PUBKEY_LEN, PUBKEY_LEN + SIG_LEN);
   const handleLen = payload[PUBKEY_LEN + SIG_LEN];
   const handleStart = PUBKEY_LEN + SIG_LEN + 1;
-  if (payload.length < handleStart + handleLen) return null;
+  if (payload.length < handleStart + handleLen + META_LEN) return null;
   const handle = payload.subarray(handleStart, handleStart + handleLen);
-  if (!verify(publicKey, concat(publicKey, handle), sig)) return null;
-  return { handle: fromUtf8(handle), publicKey, fingerprint: fingerprintOf(publicKey) };
+  const meta = payload.subarray(handleStart + handleLen, handleStart + handleLen + META_LEN);
+  if (!verify(publicKey, concat(publicKey, handle, meta), sig)) return null;
+  return {
+    handle: fromUtf8(handle),
+    publicKey,
+    fingerprint: fingerprintOf(publicKey),
+    formIndex: meta[0],
+    placeId: meta[1],
+  };
 }
 
 // ---- Direct message: addressed + sealed (encryption lives in identity/seal) ----

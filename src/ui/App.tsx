@@ -6,7 +6,10 @@ import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
 import { careActionCount, drawLogin } from "@ui/scenes/render.ts";
 import type { EditView, MoodSummary } from "@ui/scenes/render.ts";
-import { applyCare, CARES, createWisp, moodState, renameWisp, settleMood } from "@core/companion/index.ts";
+import {
+  applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
+} from "@core/companion/index.ts";
+import { PLACE_HOME } from "@core/protocol/social.ts";
 import type { Identity } from "@core/identity/index.ts";
 import { sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
@@ -47,7 +50,10 @@ export function App() {
   // The Relay link (optional) and the social layer that rides it. Participation
   // grows Hearts via `grant`. FRIENDS-place nav state stays here.
   const link = useRelay();
-  const social = useSocial(identity, link, grant);
+  const social = useSocial(identity, link, grant, () => ({
+    formIndex: formWireIndex(wispForm(wisp).id),
+    placeId: nav.level === "place" && nav.iconIndex !== null ? nav.iconIndex : PLACE_HOME,
+  }));
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
 
@@ -81,12 +87,23 @@ export function App() {
   };
   const editCancel = () => setEditing(null);
 
-  // TRAVELERS: buddies (added) listed first, then nearby (heard, not yet added).
-  const friendList: { kind: "buddy" | "nearby"; handle: string; fingerprint: string }[] = [
+  // Reachable Travelers = heard within the 5-min window (DESIGN §4.2). Stale
+  // beacons drop off so the world reflects who's actually around.
+  const reachable = social.nearby.filter((n) => Date.now() - n.lastSeen < 300_000);
+
+  // TRAVELERS: buddies (added) first, then reachable nearby/relay (not yet added).
+  // `via` distinguishes Nearby (direct) from Relay (heard across hops), §4.1.
+  const friendList: {
+    kind: "buddy" | "nearby"; handle: string; fingerprint: string;
+    via?: "nearby" | "relay";
+  }[] = [
     ...social.buddies.map((b) => ({ kind: "buddy" as const, handle: b.petname ?? b.handle, fingerprint: b.fingerprint })),
-    ...social.nearby
+    ...reachable
       .filter((n) => !social.buddies.some((b) => b.fingerprint === n.fingerprint))
-      .map((n) => ({ kind: "nearby" as const, handle: n.handle, fingerprint: n.fingerprint })),
+      .map((n) => ({
+        kind: "nearby" as const, handle: n.handle, fingerprint: n.fingerprint,
+        via: (n.hops === 0 ? "nearby" : "relay") as "nearby" | "relay",
+      })),
   ];
   const inFriends = identity != null && nav.level === "place" && currentPlace(nav).id === "travelers";
 
@@ -298,7 +315,7 @@ export function App() {
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
-                nearbyCount: social.nearby.length,
+                nearbyCount: reachable.length,
                 friends: inFriends
                   ? {
                       list: friendList,

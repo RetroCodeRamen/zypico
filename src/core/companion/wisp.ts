@@ -59,6 +59,26 @@ export const FORMS: Record<FormId, FormDef> = {
   weaver: { id: "weaver", name: "Weaver", tier: 4, color: 13, blurb: "Makes stories and guides." },
 };
 
+// A stable ordering of every form, for the 1-byte form index in presence
+// beacons (DESIGN §4.1). Append-only — never reorder (it's a wire mapping).
+export const FORM_ORDER: FormId[] = [
+  "flicker",
+  "warm_ember", "bright_ember",
+  "closewarm_glow", "publicwarm_glow", "venturing_glow", "making_glow",
+  "lantern", "hearth", "herald", "chorus", "pathfinder", "champion", "forge", "weaver",
+];
+
+/** Wire index for a form (for presence beacons). */
+export function formWireIndex(id: FormId): number {
+  const i = FORM_ORDER.indexOf(id);
+  return i < 0 ? 0 : i;
+}
+
+/** The form for a wire index (falls back to Flicker on anything unknown). */
+export function formByWireIndex(index: number): FormDef {
+  return FORMS[FORM_ORDER[index] ?? "flicker"];
+}
+
 export function tierForTotal(total: number): Tier {
   if (total >= THRESHOLD.beacon) return 4;
   if (total >= THRESHOLD.glow) return 3;
