@@ -219,6 +219,8 @@ export interface ChatView {
   messages: { mine: boolean; who: string; text: string }[];
   /** Reachable Travelers right now — the Commons' "signs of life" (§4/§6.2). */
   present: number;
+  /** Stations heard nearby (infrastructure presence). */
+  stations: number;
 }
 
 // The Wisp wanders the play area on a non-repeating path (layered sines), so it
@@ -754,9 +756,9 @@ function drawDmThread(buf: PixelBuffer, thread: NonNullable<FriendsView["thread"
 export function drawChat(buf: PixelBuffer, v: ChatView): void {
   buf.clear(C.bg);
   drawText(buf, 3, 2, v.title.slice(0, 14), C.title);
-  // Signs of life: how many Travelers are around right now.
-  const here = v.present > 0 ? `${v.present} HERE` : "QUIET";
-  drawText(buf, buf.width - measureText(here) - 3, 2, here, v.present > 0 ? C.ok : C.dim);
+  // Signs of life: how many Travelers are around right now (+ any Stations).
+  const here = (v.present > 0 ? `${v.present} HERE` : "QUIET") + (v.stations > 0 ? ` +${v.stations}ST` : "");
+  drawText(buf, buf.width - measureText(here) - 3, 2, here, v.present > 0 || v.stations > 0 ? C.ok : C.dim);
   divider(buf, 9);
   if (v.messages.length === 0) {
     drawTextCentered(buf, 30, v.present > 0 ? `${v.present} TRAVELER${v.present > 1 ? "S" : ""} HERE` : "QUIET HERE", v.present > 0 ? C.ok : C.dim);

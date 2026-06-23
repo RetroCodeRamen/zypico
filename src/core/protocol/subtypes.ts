@@ -7,6 +7,7 @@ export enum SubType {
   PRESENCE = 0x01,
   PROFILE = 0x02,
   WISP_SIG = 0x03,
+  STATION = 0x04, // a Station advertises itself + its services
 
   // private messaging
   IM = 0x10,

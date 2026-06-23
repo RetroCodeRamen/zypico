@@ -17,6 +17,9 @@ export {
 export { isKnownSubType, SubType, subTypeName } from "./subtypes.ts";
 export { decodeMail, encodeMail, type MailEnvelope } from "./mail.ts";
 export {
+  decodeStationBeacon, encodeStationBeacon, SERVICE, serviceTags, type StationBeacon,
+} from "./station.ts";
+export {
   decodeGuestbook,
   decodePage,
   decodePageReq,

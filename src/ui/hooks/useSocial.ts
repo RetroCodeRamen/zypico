@@ -7,6 +7,7 @@ import {
 import {
   decodeDM, decodePresence, decodeRoomMsg, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM, type Presence,
 } from "@core/protocol/social.ts";
+import { decodeStationBeacon, type StationBeacon } from "@core/protocol/index.ts";
 import { type Buddy, loadBuddies, saveBuddies, upsertBuddy } from "@app/storage/buddies.ts";
 import {
   type DmThreads, type RoomLine,
@@ -39,6 +40,12 @@ export interface NearbyTraveler extends Presence {
   hops: number;
 }
 
+/** A heard Station: its beacon plus how/when we heard it. */
+export interface KnownStation extends StationBeacon {
+  lastSeen: number;
+  hops: number;
+}
+
 // The social layer: presence (who's around), buddies, encrypted DMs, and the
 // HLC-ordered main chatroom. Reads/sends through the Relay link; persists
 // buddies per-identity. The inbound handler is bound once and reads current
@@ -51,6 +58,7 @@ export function useSocial(
 ) {
   const [buddies, setBuddies] = useState<Buddy[]>([]);
   const [nearby, setNearby] = useState<NearbyTraveler[]>([]);
+  const [stations, setStations] = useState<KnownStation[]>([]);
   const [dmThreads, setDmThreads] = useState<DmThreads>({});
   const [roomMsgs, setRoomMsgs] = useState<RoomLine[]>([]);
   const [discoveries, setDiscoveries] = useState<Discovery[]>([]); // the Wisp's journal
@@ -61,10 +69,12 @@ export function useSocial(
   const identityRef = useRef<Identity | null>(null);
   const buddiesRef = useRef<Buddy[]>(buddies);
   const nearbyRef = useRef<NearbyTraveler[]>(nearby);
+  const stationsRef = useRef<KnownStation[]>(stations);
   const metaRef = useRef(presenceMeta);
   identityRef.current = identity;
   buddiesRef.current = buddies;
   nearbyRef.current = nearby;
+  stationsRef.current = stations;
   metaRef.current = presenceMeta;
 
   useEffect(() => {
@@ -124,6 +134,14 @@ export function useSocial(
       const ts = decodeHlc(m.hlc);
       hlcRef.current.recv(ts); // keep our clock ahead of what we hear
       ingestRoom({ ts, senderFp: m.senderFp, handle: m.handle, text: m.text, mine: false });
+    } else if (f.subtype === SubType.STATION) {
+      const s = decodeStationBeacon(f.payload);
+      if (!s) return;
+      const isNew = !stationsRef.current.some((x) => x.fingerprint === s.fingerprint);
+      const entry: KnownStation = { ...s, lastSeen: Date.now(), hops: f.hops };
+      setStations((prev) => [...prev.filter((x) => x.fingerprint !== s.fingerprint), entry].slice(-10));
+      // The Wisp hears about Stations too (DESIGN §2 "lives its life").
+      if (isNew) setDiscoveries((prev) => addDiscovery(prev, { kind: "station", name: s.name, at: Date.now() }));
     }
   };
 
@@ -202,5 +220,5 @@ export function useSocial(
     setRoomMsgs(room);
   };
 
-  return { buddies, nearby, dmThreads, roomMsgs, discoveries, resolvePubkey, addBuddy, sendRoom, sendDM, load };
+  return { buddies, nearby, stations, dmThreads, roomMsgs, discoveries, resolvePubkey, addBuddy, sendRoom, sendDM, load };
 }

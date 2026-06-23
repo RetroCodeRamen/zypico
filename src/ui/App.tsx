@@ -491,6 +491,7 @@ export function App() {
                       title: "COMMONS",
                       messages: social.roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })),
                       present: reachable.length,
+                      stations: social.stations.filter((s) => Date.now() - s.lastSeen < 300_000).length,
                     }
                   : undefined,
               }}
