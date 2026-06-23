@@ -11,14 +11,19 @@
 // back toward it (outline §13.5). The reducer is pure and DOM-free so it
 // unit-tests in isolation (plan §9 tier 1); rendering reads this state.
 
+// The eight Places of the Relay (DESIGN §6.2). Home/landing is your Wisp; you
+// travel *into* the Relay from there. Connectivity is ambient — there is no
+// "Radio" destination (DESIGN §6.1). Some Places (Commons, Travelers, Wisp)
+// render a live surface rather than this item menu; the rest are placeholders
+// that later milestones (Mail M6, Pages M5, Arcade M9, Exchange M8) fill in.
 export type Place =
-  | "radio" | "mail" | "friends" | "profile"
-  | "bcast" | "arcade" | "craft" | "quests";
+  | "commons" | "travelers" | "post" | "pages"
+  | "wisp" | "arcade" | "exchange" | "profile";
 
 export interface PlaceDef {
   id: Place;
   label: string;
-  /** Local surfaces work offline; relay surfaces travel to the mesh (outline §1). */
+  /** Local surfaces work offline; relay surfaces travel to the mesh (DESIGN §5). */
   scope: "local" | "relay";
   /** Placeholder menu items — real per-phase functionality fills these in later. */
   items: string[];
@@ -26,15 +31,20 @@ export interface PlaceDef {
 
 // Ring order matches the icon layout: top row then bottom row (outline §13.1).
 export const PLACES: PlaceDef[] = [
-  { id: "radio", label: "RADIO", scope: "relay", items: ["STATUS", "RECONNECT", "DISCONNECT"] },
-  { id: "mail", label: "MAIL", scope: "relay", items: ["INBOX", "COMPOSE", "OUTBOX"] },
-  { id: "friends", label: "FRIENDS", scope: "relay", items: ["LIST", "ADD FRIEND", "REQUESTS"] },
-  { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "MY WISP", "SETTINGS"] },
-  { id: "bcast", label: "BROADCAST", scope: "relay", items: ["GENERAL", "GAMES", "LOCAL", "NEW BOARD"] },
+  { id: "commons", label: "COMMONS", scope: "relay", items: ["CHAT"] },
+  { id: "travelers", label: "TRAVELERS", scope: "relay", items: ["LIST"] },
+  { id: "post", label: "THE POST", scope: "relay", items: ["INBOX", "COMPOSE", "OUTBOX"] },
+  { id: "pages", label: "PAGES", scope: "relay", items: ["MY PAGE", "BROWSE", "GUESTBOOK"] },
+  { id: "wisp", label: "WISP", scope: "local", items: ["CARE"] },
   { id: "arcade", label: "ARCADE", scope: "local", items: ["TIC-TAC-TOE", "CHESS", "SIGNAL MATCH"] },
-  { id: "craft", label: "CRAFT", scope: "local", items: ["NEW CART", "MY CARTS", "EDITOR"] },
-  { id: "quests", label: "QUESTS", scope: "relay", items: ["ACTIVE", "BROWSE", "JOURNEY"] },
+  { id: "exchange", label: "EXCHANGE", scope: "local", items: ["ITEMS", "THEMES", "CARTS"] },
+  { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "RELAY", "SETTINGS"] },
 ];
+
+/** Index of a Place in the ring (for direct navigation / special-casing). */
+export function placeIndex(id: Place): number {
+  return PLACES.findIndex((p) => p.id === id);
+}
 
 export const TOP_PLACES = PLACES.slice(0, 4);
 export const BOTTOM_PLACES = PLACES.slice(4, 8);

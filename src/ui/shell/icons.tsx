@@ -16,43 +16,45 @@ const COMMON = {
 };
 
 const PATHS: Record<Place, ReactNode> = {
-  // Radio — antenna with broadcast arcs (enter the Relay).
-  radio: (
+  // The Commons — the town square: a speech bubble (public chat / gathering).
+  commons: (
     <>
-      <line x1="12" y1="13" x2="12" y2="21" />
-      <circle cx="12" cy="11" r="2" />
-      <path d="M7 7a7 7 0 0 0 0 9M17 7a7 7 0 0 1 0 9" />
+      <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+      <line x1="7" y1="9" x2="17" y2="9" />
+      <line x1="7" y1="12" x2="13" y2="12" />
     </>
   ),
-  // Mail — envelope.
-  mail: (
-    <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 7l9 6 9-6" />
-    </>
-  ),
-  // Friends — two people.
-  friends: (
+  // Travelers — two people (friends met on your travels).
+  travelers: (
     <>
       <circle cx="9" cy="8" r="3" />
       <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
       <path d="M16 6.5a3 3 0 0 1 0 5M17 15c2 0 4 2 4 5" />
     </>
   ),
-  // Profile — single head + shoulders.
-  profile: (
+  // The Post — envelope (Mail).
+  post: (
     <>
-      <circle cx="12" cy="8" r="3.5" />
-      <path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M3 7l9 6 9-6" />
     </>
   ),
-  // Broadcast — bulletin board / posts.
-  bcast: (
+  // Pages — a document with lines (Traveler Pages + Guestbooks).
+  pages: (
     <>
-      <rect x="3" y="4" width="18" height="13" rx="2" />
-      <line x1="7" y1="8" x2="17" y2="8" />
-      <line x1="7" y1="12" x2="13" y2="12" />
-      <path d="M9 17l-2 3M15 17l2 3" />
+      <path d="M6 3h8l4 4v14a0 0 0 0 1 0 0H6a0 0 0 0 1 0 0z" />
+      <path d="M14 3v4h4" />
+      <line x1="8" y1="12" x2="16" y2="12" />
+      <line x1="8" y1="15" x2="16" y2="15" />
+      <line x1="8" y1="18" x2="13" y2="18" />
+    </>
+  ),
+  // Wisp — the companion: a little spark/creature with a glow.
+  wisp: (
+    <>
+      <path d="M12 4c4 0 7 3 7 7 0 5-4 6-4 9H9c0-3-4-4-4-9 0-4 3-7 7-7z" />
+      <circle cx="9.5" cy="11" r="1" fill="currentColor" stroke="none" />
+      <circle cx="14.5" cy="11" r="1" fill="currentColor" stroke="none" />
     </>
   ),
   // Arcade — a die (outline §13.1 "die = Arcade").
@@ -66,19 +68,17 @@ const PATHS: Record<Place, ReactNode> = {
       <circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none" />
     </>
   ),
-  // Craft — a ">_" code prompt (outline §13.1 "_> = Craft/Lua").
-  craft: (
+  // The Exchange — a marketplace: swap arrows (items, themes, Carts).
+  exchange: (
     <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M7 10l3 2-3 2" />
-      <line x1="12" y1="15" x2="16" y2="15" />
+      <path d="M4 9h13l-4-4M20 15H7l4 4" />
     </>
   ),
-  // Quests — compass.
-  quests: (
+  // Profile — single head + shoulders.
+  profile: (
     <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M15.5 8.5l-2 5-5 2 2-5z" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="8" r="3.5" />
+      <path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
     </>
   ),
 };

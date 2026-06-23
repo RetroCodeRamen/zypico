@@ -1,7 +1,8 @@
 // Everything the user sees is drawn here, inside the 128×80 dot matrix (the
 // user's directive: "all menus render inside the screen"). drawScreen() reads a
-// small view model and paints the companion home, a place menu, the RADIO link
-// status, the text-entry field, or the Wisp detail. Pure buffer drawing — no DOM.
+// small view model and paints the companion home (with ambient activity stars +
+// connection glyph), a place menu, a live surface (Commons / Travelers / Wisp /
+// Profile), the text-entry field, or the Wisp detail. Pure buffer drawing — no DOM.
 
 import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
 import { CELL_W, drawText, drawTextCentered, measureText } from "@ui/pixel/font.ts";
@@ -56,7 +57,7 @@ export interface EditView {
   value: string;
 }
 
-/** Detail view for MY WISP. `cursor` 0–4 selects a heart to raise, 5 = name. */
+/** Detail view for the WISP Place. `cursor` 0–4 selects a heart to raise, 5 = name. */
 export interface WispView {
   cursor: number;
 }
@@ -106,14 +107,16 @@ export interface ScreenModel {
   relay: RelayView;
   wisp: Wisp;
   wispView: WispView | null;
-  /** FRIENDS screen state (buddy list + open DM thread), when in that place. */
+  /** TRAVELERS screen state (buddy list + open DM thread), when in that place. */
   friends?: FriendsView;
-  /** BROADCAST chatroom state, when in that place. */
+  /** COMMONS chatroom state, when in that place. */
   chat?: ChatView;
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
   muted: boolean;
+  /** Reachable Travelers right now — drives the home activity stars (§6.4). */
+  nearbyCount: number;
 }
 
 export interface FriendsView {
@@ -136,6 +139,21 @@ function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
+/** A small bright "+" star, for the activity indicator (§6.4). */
+function drawStar(buf: PixelBuffer, x: number, y: number, color: number): void {
+  buf.set(x, y, color);
+  buf.set(x - 1, y, color);
+  buf.set(x + 1, y, color);
+  buf.set(x, y - 1, color);
+  buf.set(x, y + 1, color);
+}
+
+// Nearby Traveler count → bright activity stars (DESIGN §6.4): 0–3 → 1, 4–6 → 2,
+// 7–9 → 3. Airtime caps a neighborhood at low dozens, so three is "very alive".
+function activityStars(nearbyCount: number): number {
+  return nearbyCount <= 3 ? 1 : nearbyCount <= 6 ? 2 : 3;
+}
+
 /** The companion home: the Wisp wandering, its name above, the idle hint below. */
 export function drawCompanion(
   buf: PixelBuffer,
@@ -143,15 +161,23 @@ export function drawCompanion(
   wisp: Wisp,
   highlightLabel?: string,
   muted?: boolean,
+  online?: boolean,
+  nearbyCount = 0,
 ): void {
   buf.clear(C.bg);
   buf.fillRect(0, 66, buf.width, 14, C.ground);
   if (muted) drawText(buf, 2, 2, "MUTE", C.dim);
+  // Ambient connection glyph (DESIGN §6.1 — status, never a destination).
+  const conn = online ? "=RELAY" : "OFFLINE";
+  drawText(buf, buf.width - measureText(conn) - 2, 2, conn, online ? C.ok : C.dim);
 
   const stars = [[16, 12], [34, 7], [53, 17], [77, 9], [97, 19], [110, 8], [64, 5]];
   for (let i = 0; i < stars.length; i++) {
     if ((frame + i * 5) % 22 < 11) buf.set(stars[i][0], stars[i][1], C.text);
   }
+  // Bright, steady activity stars — how inhabited the Relay feels right now.
+  const bright = [[24, 14], [64, 11], [104, 14]];
+  for (let i = 0; i < activityStars(nearbyCount); i++) drawStar(buf, bright[i][0], bright[i][1], C.textHi);
 
   if (wisp.name) drawTextCentered(buf, 3, wisp.name.toUpperCase(), C.title);
 
@@ -214,33 +240,42 @@ export function drawPlace(buf: PixelBuffer, place: PlaceDef, state: NavState): v
   }
 }
 
-export function drawRadio(buf: PixelBuffer, place: PlaceDef, state: NavState, relay: RelayView): void {
+// PROFILE — identity + settings, plus the ambient Relay link report. RELAY is a
+// status item here (not a navigation destination, DESIGN §6.1): selecting it
+// shows the connection and re-links; SETTINGS shows the sound toggle.
+export function drawProfile(
+  buf: PixelBuffer,
+  place: PlaceDef,
+  state: NavState,
+  relay: RelayView,
+  muted: boolean,
+): void {
   buf.clear(C.bg);
   drawText(buf, 3, 2, place.label, C.title);
-  drawText(buf, buf.width - measureText("REL") - 3, 2, "REL", C.tagRelay);
+  drawText(buf, buf.width - measureText("LOC") - 3, 2, "LOC", C.tagLocal);
   divider(buf, 9);
-  drawText(buf, 3, 13, relay.statusLabel, relay.online ? C.ok : relay.detail ? C.warn : C.dim);
-  if (relay.nodeLabel) drawText(buf, 3, 20, relay.nodeLabel, C.text);
-  divider(buf, 28);
-  drawItems(buf, place.items, state, 32);
+  drawItems(buf, place.items, state, 13);
 
-  // On failure, show the real error wrapped so it can be read off the device.
-  if (!relay.online && relay.detail) {
-    const lines = wrapText(relay.detail, Math.floor((buf.width - 4) / CELL_W));
-    lines.slice(0, 3).forEach((ln, i) => drawText(buf, 2, 60 + i * 7, ln, C.warn));
-    return;
-  }
-
-  // Selecting STATUS gives an explicit "are we connected to anything?" report.
-  const statusIdx = place.items.indexOf("STATUS");
-  if (statusIdx >= 0 && state.selectedItem === statusIdx) {
-    divider(buf, 55);
-    drawTextCentered(buf, 59, relay.online ? "CONNECTED" : "NOT CONNECTED", relay.online ? C.ok : C.warn);
+  if (state.selectedItem === null) return;
+  const item = place.items[state.selectedItem];
+  divider(buf, 45);
+  if (item === "RELAY") {
+    drawTextCentered(buf, 49, relay.statusLabel, relay.online ? C.ok : relay.detail ? C.warn : C.dim);
     if (relay.online) {
-      drawTextCentered(buf, 67, `VIA ${relay.via ?? "LINK"}`, C.text);
+      drawTextCentered(buf, 57, `VIA ${relay.via ?? "LINK"}`, C.text);
+      if (relay.nodeLabel) drawTextCentered(buf, 65, relay.nodeLabel, C.dim);
+    } else if (relay.detail) {
+      wrapText(relay.detail, Math.floor((buf.width - 4) / CELL_W)).slice(0, 2)
+        .forEach((ln, i) => drawText(buf, 2, 57 + i * 7, ln, C.warn));
     } else {
-      drawTextCentered(buf, 67, "USE CONNECT TO LINK", C.dim);
+      drawTextCentered(buf, 57, "ACCEPT TO RECONNECT", C.dim);
     }
+  } else if (item === "SETTINGS") {
+    drawTextCentered(buf, 49, muted ? "SOUND: OFF" : "SOUND: ON", muted ? C.dim : C.ok);
+    drawTextCentered(buf, 57, "ACCEPT TO TOGGLE", C.dim);
+  } else {
+    drawTextCentered(buf, 49, "NOT BUILT YET", C.warn);
+    drawTextCentered(buf, 57, "CANCEL TO GO BACK", C.dim);
   }
 }
 
@@ -255,7 +290,7 @@ export function drawEditor(buf: PixelBuffer, frame: number, edit: EditView): voi
   drawTextCentered(buf, 70, "ACCEPT OK  CANCEL BACK", C.dim);
 }
 
-/** MY WISP: the creature, its form, age, and the five hearts. */
+/** The WISP Place: the creature, its form, age, and the five hearts. */
 export function drawWispDetail(
   buf: PixelBuffer,
   frame: number,
@@ -374,12 +409,16 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   const { nav } = model;
   if (nav.level === "home") {
-    drawCompanion(buf, frame, model.wisp, nav.iconIndex !== null ? PLACES[nav.iconIndex].label : undefined, model.muted);
+    drawCompanion(
+      buf, frame, model.wisp,
+      nav.iconIndex !== null ? PLACES[nav.iconIndex].label : undefined,
+      model.muted, model.relay.online, model.nearbyCount,
+    );
     return;
   }
   const place = currentPlace(nav);
-  if (place.id === "radio") drawRadio(buf, place, nav, model.relay);
-  else if (place.id === "friends" && model.friends) drawFriends(buf, model.friends);
-  else if (place.id === "bcast" && model.chat) drawChat(buf, model.chat);
+  if (place.id === "travelers" && model.friends) drawFriends(buf, model.friends);
+  else if (place.id === "commons" && model.chat) drawChat(buf, model.chat);
+  else if (place.id === "profile") drawProfile(buf, place, nav, model.relay, model.muted);
   else drawPlace(buf, place, nav);
 }

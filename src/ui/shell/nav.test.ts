@@ -42,7 +42,10 @@ describe("nav — home level", () => {
 });
 
 describe("nav — place level", () => {
-  const enterFirstPlace = () => run(INITIAL_NAV, "select", "accept");
+  // Enter a multi-item placeholder Place (index 2 = The Post). The live Places
+  // (Commons/Travelers/Wisp) render their own surface with a single item, so the
+  // menu-cycling tests use a Place that actually has a multi-row item menu.
+  const enterFirstPlace = () => run(INITIAL_NAV, "select", "select", "select", "accept");
 
   it("cycles menu items with SELECT, wrapping", () => {
     let s = enterFirstPlace();

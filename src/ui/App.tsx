@@ -3,7 +3,7 @@ import { Screen } from "@ui/shell/Screen.tsx";
 import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
-import { currentPlace, INITIAL_NAV, navReduce } from "@ui/shell/nav.ts";
+import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
 import { drawLogin } from "@ui/scenes/render.ts";
 import type { EditView } from "@ui/scenes/render.ts";
 import { applyActivity, createWisp, HEARTS, renameWisp, wispForm } from "@core/companion/index.ts";
@@ -84,16 +84,16 @@ export function App() {
   };
   const editCancel = () => setEditing(null);
 
-  // FRIENDS: buddies (added) listed first, then nearby (heard, not yet added).
+  // TRAVELERS: buddies (added) listed first, then nearby (heard, not yet added).
   const friendList: { kind: "buddy" | "nearby"; handle: string; fingerprint: string }[] = [
     ...social.buddies.map((b) => ({ kind: "buddy" as const, handle: b.petname ?? b.handle, fingerprint: b.fingerprint })),
     ...social.nearby
       .filter((n) => !social.buddies.some((b) => b.fingerprint === n.fingerprint))
       .map((n) => ({ kind: "nearby" as const, handle: n.handle, fingerprint: n.fingerprint })),
   ];
-  const inFriends = identity != null && nav.level === "place" && currentPlace(nav).id === "friends";
+  const inFriends = identity != null && nav.level === "place" && currentPlace(nav).id === "travelers";
 
-  // Reset the FRIENDS cursor/thread whenever we enter that place.
+  // Reset the TRAVELERS cursor/thread whenever we enter that place.
   useEffect(() => {
     if (inFriends) {
       setFriendsCursor(0);
@@ -117,7 +117,7 @@ export function App() {
       return; // SELECT is inert while editing
     }
 
-    // MY WISP detail: (dev) raise hearts / name / reset / back out.
+    // WISP Place: care/detail surface — (dev) raise hearts / name / reset / back.
     if (wispView) {
       // Selectable actions: 5 hearts (dev only), then NAME, then RESET (dev only).
       const actionCount = CAN_RAISE ? HEARTS.length + 2 : 1;
@@ -145,11 +145,12 @@ export function App() {
         }
       } else if (action === "cancel") {
         setWispView(null);
+        navDispatch("cancel"); // leave the Wisp place, back to home
       }
       return;
     }
 
-    // FRIENDS place: buddy list (add nearby / open DM) and DM threads.
+    // TRAVELERS place: buddy list (add nearby / open DM) and DM threads.
     if (inFriends) {
       if (friendsThread) {
         const buddy = social.buddies.find((b) => b.fingerprint === friendsThread);
@@ -177,30 +178,31 @@ export function App() {
       return;
     }
 
+    // Entering the Wisp Place opens the care/detail surface (home = Wisp; the
+    // Place is where you interact with it). DESIGN §6.2/§6.5.
+    if (action === "accept" && nav.level === "home" && nav.iconIndex !== null
+        && PLACES[nav.iconIndex].id === "wisp") {
+      sfx("accept");
+      setWispView({ cursor: 0 });
+      navDispatch("accept");
+      return;
+    }
+
     if (action === "accept" && nav.level === "place") {
       const place = currentPlace(nav);
       const item = place.items[nav.itemIndex];
-      if (place.id === "radio") {
-        if (item === "RECONNECT") {
-          sfx("accept");
-          void link.connectBoard(); // manual retry if the always-on link dropped
-          return;
-        }
-        if (item === "DISCONNECT") {
-          void link.disconnect();
-          return;
-        }
-        // STATUS just shows the link report (handled by selection rendering).
-      }
-      if (place.id === "bcast") {
+      if (place.id === "commons") {
         sfx("accept");
-        setEditing({ label: "MAIN ROOM", value: "", onSubmit: (v) => social.sendRoom(v) });
+        setEditing({ label: "COMMONS", value: "", onSubmit: (v) => social.sendRoom(v) });
         return;
       }
       if (place.id === "profile") {
-        if (item === "MY WISP") {
+        if (item === "RELAY") {
+          // Ambient link control: report status (select) + re-link / drop.
           sfx("accept");
-          setWispView({ cursor: 0 });
+          if (link.view.online) void link.disconnect();
+          else void link.connectBoard();
+          navDispatch("accept"); // select so the status report shows
           return;
         }
         if (item === "SETTINGS") {
@@ -210,6 +212,7 @@ export function App() {
             if (!next) sfx("accept");
             return next;
           });
+          navDispatch("accept"); // select so the toggle state shows
           return;
         }
       }
@@ -276,6 +279,7 @@ export function App() {
             <Screen
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
+                nearbyCount: social.nearby.length,
                 friends: inFriends
                   ? {
                       list: friendList,
@@ -288,13 +292,14 @@ export function App() {
                         : null,
                     }
                   : undefined,
-                chat: nav.level === "place" && currentPlace(nav).id === "bcast"
-                  ? { title: "MAIN ROOM", messages: social.roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })) }
+                chat: nav.level === "place" && currentPlace(nav).id === "commons"
+                  ? { title: "COMMONS", messages: social.roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })) }
                   : undefined,
               }}
               onIcon={(index) => {
                 sfx("accept");
-                setWispView(null);
+                // The Wisp icon opens its care surface; others clear it.
+                setWispView(PLACES[index].id === "wisp" ? { cursor: 0 } : null);
                 navDispatch({ type: "goto", index });
               }}
             />
