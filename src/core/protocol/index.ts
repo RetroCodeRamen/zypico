@@ -22,6 +22,9 @@ export {
   decodeStationBeacon, encodeStationBeacon, SERVICE, serviceTags, type StationBeacon,
 } from "./station.ts";
 export {
+  decodeVault, decodeVaultReq, encodeVault, encodeVaultReq, type VaultBlobMsg,
+} from "./vault.ts";
+export {
   decodeGuestbook,
   decodePage,
   decodePageReq,

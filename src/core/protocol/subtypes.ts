@@ -40,6 +40,9 @@ export enum SubType {
   MANIFEST = 0x60,
   PULL_REQ = 0x61,
   PULL_SERVE = 0x62,
+  VAULT_PUT = 0x63, // store an encrypted Account Vault at a Station
+  VAULT_REQ = 0x64, // ask a Station for your stored Vault
+  VAULT = 0x65,     // a Station serves a stored (opaque) Vault
 
   // moderation
   BLOCKLIST = 0x70,

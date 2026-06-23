@@ -5,7 +5,7 @@ import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
 import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
-import type { EditView, MoodSummary, PageView, PostView } from "@ui/scenes/render.ts";
+import type { EditView, MoodSummary, PageView, PostView, VaultView } from "@ui/scenes/render.ts";
 import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
 } from "@core/companion/index.ts";
@@ -22,6 +22,7 @@ import { useIdentity } from "@ui/hooks/useIdentity.ts";
 import { usePages } from "@ui/hooks/usePages.ts";
 import { usePageExchange } from "@ui/hooks/usePageExchange.ts";
 import { usePostOffice } from "@ui/hooks/usePostOffice.ts";
+import { useVault } from "@ui/hooks/useVault.ts";
 
 // Hearts are earned through participation, never picked at will (DESIGN §2) —
 // real activity hooks grant them. CAN_RAISE now only gates a dev-only RESET in
@@ -81,13 +82,18 @@ export function App() {
   const postOffice = usePostOffice(identity, link, social.resolvePubkey, reachableFps);
   const [postView, setPostView] = useState<PostView | null>(null);
 
+  // Account Vault: encrypted backup/restore at a Station. Restore re-loads every
+  // local hook from the freshly-restored storage.
+  const reloadLocal = (fp: string) => {
+    loadCompanion(fp); social.load(fp); loadPages(fp);
+    pageExchange.loadGuests(fp); postOffice.load(fp);
+  };
+  const vault = useVault(identity, link, reloadLocal);
+  const [vaultView, setVaultView] = useState<VaultView | null>(null);
+
   // Reached at login (after identity is derived, before the gate lifts).
   postAuthRef.current = (id: Identity) => {
-    loadCompanion(id.fingerprint);
-    social.load(id.fingerprint);
-    loadPages(id.fingerprint);
-    pageExchange.loadGuests(id.fingerprint);
-    postOffice.load(id.fingerprint);
+    reloadLocal(id.fingerprint);
     void link.connectBoard(true); // always-on link to the board, no manual step
   };
 
@@ -250,6 +256,14 @@ export function App() {
       return;
     }
 
+    // PROFILE → VAULT overlay: encrypted backup / restore.
+    if (vaultView) {
+      if (action === "select") setVaultView({ cursor: (vaultView.cursor + 1) % 2 });
+      else if (action === "accept") { if (vaultView.cursor === 0) vault.backup(); else vault.restore(); }
+      else if (action === "cancel") { setVaultView(null); navDispatch("cancel"); }
+      return;
+    }
+
     // THE POST overlay: read mail, pick a recipient + compose, browse the outbox.
     if (postView) {
       if (postView.panel === "inbox") {
@@ -360,6 +374,11 @@ export function App() {
           navDispatch("accept"); // select so the status report shows
           return;
         }
+        if (item === "VAULT") {
+          sfx("accept");
+          setVaultView({ cursor: 0 });
+          return;
+        }
         if (item === "SETTINGS") {
           // Real setting: toggle sound. Beep on unmute so you hear it return.
           setMutedState((m) => {
@@ -442,6 +461,8 @@ export function App() {
               : pageView.panel === "browse"
                 ? "SELECT move · ACCEPT view · CANCEL back"
                 : "SELECT move · ACCEPT edit · CANCEL back"
+        : vaultView
+          ? "SELECT move · ACCEPT do · CANCEL back"
         : postView
           ? postView.panel === "read" || postView.panel === "outbox"
             ? "CANCEL back"
@@ -474,6 +495,7 @@ export function App() {
                 pageViewed: pageView?.panel === "view" && pageView.fp ? pageExchange.pages[pageView.fp] ?? null : null,
                 postView, inbox: postOffice.inbox, outbox: postOffice.outbox, mailPick,
                 mailRead: postView?.panel === "read" && postView.id != null ? postOffice.inbox.find((m) => m.id === postView.id) ?? null : null,
+                vaultView, vaultStatus: vault.status,
                 nearbyCount: reachable.length,
                 friends: inFriends
                   ? {
@@ -503,6 +525,7 @@ export function App() {
                 setWispView(PLACES[index].id === "wisp" ? { panel: "care", cursor: 0 } : null);
                 setPageView(null);
                 setPostView(null);
+                setVaultView(null);
                 navDispatch({ type: "goto", index });
               }}
             />

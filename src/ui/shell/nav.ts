@@ -38,7 +38,7 @@ export const PLACES: PlaceDef[] = [
   { id: "wisp", label: "WISP", scope: "local", items: ["CARE"] },
   { id: "arcade", label: "ARCADE", scope: "local", items: ["TIC-TAC-TOE", "CHESS", "SIGNAL MATCH"] },
   { id: "exchange", label: "EXCHANGE", scope: "local", items: ["ITEMS", "THEMES", "CARTS"] },
-  { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "RELAY", "SETTINGS"] },
+  { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "VAULT", "RELAY", "SETTINGS"] },
 ];
 
 /** Index of a Place in the ring (for direct navigation / special-casing). */

@@ -85,6 +85,11 @@ export interface PageView {
   fp?: string;
 }
 
+/** PROFILE → VAULT overlay (cursor: 0 backup, 1 restore). */
+export interface VaultView {
+  cursor: number;
+}
+
 /** The POST place overlay: read mail, pick a recipient to compose, or browse the
  * outbox. `id` selects the open inbox mail (panel "read"). */
 export interface PostView {
@@ -181,6 +186,9 @@ export interface ScreenModel {
   mailPick: { handle: string; fingerprint: string }[];
   /** The inbox mail being read (POST → read), or null. */
   mailRead: InboxMail | null;
+  /** PROFILE → VAULT overlay + its status, when open. */
+  vaultView: VaultView | null;
+  vaultStatus: "idle" | "backed-up" | "requesting" | "restored";
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
   /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
@@ -624,6 +632,29 @@ export function drawPageGuestbook(buf: PixelBuffer, entries: GuestEntry[]): void
   drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
 }
 
+/** PROFILE → VAULT: encrypted backup/restore to a Station. */
+export function drawVault(buf: PixelBuffer, view: VaultView, status: ScreenModel["vaultStatus"]): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "ACCOUNT VAULT", C.title);
+  drawText(buf, buf.width - measureText("STN") - 3, 2, "STN", C.tagRelay);
+  divider(buf, 9);
+  [["BACK UP", 0], ["RESTORE", 1]].forEach(([label, i]) => {
+    const y = 16 + (i as number) * 9;
+    const hi = view.cursor === i;
+    if (hi) drawText(buf, 1, y, ">", C.cursor);
+    drawText(buf, 7, y, label as string, hi ? C.textHi : C.text);
+  });
+  divider(buf, 38);
+  const msg = status === "backed-up" ? "BACKED UP TO STATION"
+    : status === "requesting" ? "FETCHING VAULT..."
+    : status === "restored" ? "RESTORED!"
+    : "ENCRYPTED ON-DEVICE";
+  drawTextCentered(buf, 46, msg, status === "restored" || status === "backed-up" ? C.ok : C.dim);
+  drawTextCentered(buf, 56, "ONLY YOU CAN DECRYPT IT", C.dim);
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "SELECT move  ACCEPT do  CANCEL back", C.dim);
+}
+
 /** THE POST → INBOX: received mail (newest first), unread marked. */
 export function drawMailInbox(buf: PixelBuffer, inbox: InboxMail[], cursor: number): void {
   buf.clear(C.bg);
@@ -796,6 +827,10 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     else if (model.postView.panel === "pick") drawMailPick(buf, model.mailPick, model.postView.cursor);
     else if (model.postView.panel === "outbox") drawMailOutbox(buf, model.outbox);
     else drawMailInbox(buf, model.inbox, model.postView.cursor);
+    return;
+  }
+  if (model.vaultView) {
+    drawVault(buf, model.vaultView, model.vaultStatus);
     return;
   }
   const { nav } = model;
