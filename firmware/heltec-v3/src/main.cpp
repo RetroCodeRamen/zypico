@@ -24,6 +24,7 @@
 #include <RadioLib.h>
 #include <ESPAsyncWebServer.h>
 #include <U8g2lib.h>
+#include "logo_xbm.h" // generated: tools/gen-logo.py
 
 // --- Heltec V3 onboard SSD1306 OLED (128x64, I2C) ---
 #define PIN_VEXT 36   // powers the OLED (active LOW)
@@ -56,6 +57,8 @@ static U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, PIN_OLED_RST, PIN_OLED_
 #define MAC_HEADER 6     // [srcId:4][seq:2]
 #define MAX_PAYLOAD 240
 
+#define PIN_USER_BTN 0   // Heltec V3 "PRG"/USER button (GPIO0, active LOW)
+
 static SX1262 radio = new Module(PIN_NSS, PIN_DIO1, PIN_RST, PIN_BUSY);
 static AsyncWebServer server(80);
 static AsyncWebSocket ws("/ws");
@@ -65,13 +68,46 @@ static uint16_t txSeq = 0;
 static char apSsid[24]; // unique per board so two boards are distinguishable
 static volatile bool rxFlag = false;
 
+// OLED view: the logo splash stays up until the USER button switches to info.
+static bool showInfo = false;
+
+// Distinct ZyPico devices heard directly (by MAC src) — "in range" on the OLED.
+#define MAX_PEERS 24
+#define PEER_WINDOW_MS 300000UL // a device is "in range" if heard in the last 5 min
+static uint32_t peerIds[MAX_PEERS];
+static uint32_t peerLastMs[MAX_PEERS];
+static int peerCount = 0;
+
 struct TxMsg {
   uint8_t len;
   uint8_t data[MAX_PAYLOAD];
 };
 static QueueHandle_t txQueue;
 
-static void showOled();
+static void drawSplashOled();
+static void drawInfo();
+
+// Record a directly-heard device (its MAC src), newest timestamp wins.
+static void notePeer(uint32_t src) {
+  uint32_t now = millis();
+  for (int i = 0; i < peerCount; i++) {
+    if (peerIds[i] == src) { peerLastMs[i] = now; return; }
+  }
+  if (peerCount < MAX_PEERS) {
+    peerIds[peerCount] = src; peerLastMs[peerCount] = now; peerCount++;
+  } else {
+    int oldest = 0;
+    for (int i = 1; i < MAX_PEERS; i++) if (peerLastMs[i] < peerLastMs[oldest]) oldest = i;
+    peerIds[oldest] = src; peerLastMs[oldest] = now;
+  }
+}
+
+static int peersInRange() {
+  uint32_t now = millis();
+  int n = 0;
+  for (int i = 0; i < peerCount; i++) if (now - peerLastMs[i] < PEER_WINDOW_MS) n++;
+  return n;
+}
 
 // Magic-framed binary on USB serial, for the test harness (see header comment).
 static const uint8_t SERIAL_MAGIC0 = 0xAA;
@@ -147,22 +183,34 @@ void setup() {
   digitalWrite(PIN_VEXT, LOW); // LOW = OLED powered
   delay(50);
   oled.begin();
-  showOled();
+  pinMode(PIN_USER_BTN, INPUT_PULLUP);
+  // Boot to the logo splash; it stays until the USER button switches to info.
+  drawSplashOled();
 
   Serial.printf("ZyPico board up. nodeId=%u  AP=%s  freq=%.1f\n", nodeId, apSsid, (double)ZYPICO_LORA_FREQ);
 }
 
-static void showOled() {
-  char node[20];
-  snprintf(node, sizeof(node), "node !%x", nodeId);
+static void drawSplashOled() {
   oled.clearBuffer();
-  oled.setFont(u8g2_font_ncenB14_tr);
-  oled.drawStr(18, 24, "ZyPico");
+  oled.drawXBM((128 - ZYPICO_LOGO_W) / 2, (64 - ZYPICO_LOGO_H) / 2, ZYPICO_LOGO_W, ZYPICO_LOGO_H, ZYPICO_LOGO_BITS);
+  oled.sendBuffer();
+}
+
+// Info screen: no wordmark (the splash brands the device); status + how many
+// ZyPico devices are in radio range right now.
+static void drawInfo() {
+  char line[28];
+  oled.clearBuffer();
   oled.setFont(u8g2_font_5x8_tr);
-  oled.drawStr(2, 40, "WIFI:");
-  oled.drawStr(30, 40, apSsid);
-  oled.drawStr(2, 52, node);
-  oled.drawStr(2, 62, "915 MHz");
+  oled.drawStr(2, 10, "AP:");
+  oled.drawStr(22, 10, apSsid);
+  snprintf(line, sizeof(line), "node !%x", nodeId);
+  oled.drawStr(2, 22, line);
+  oled.drawStr(2, 34, "915 MHz");
+  oled.drawLine(0, 40, 127, 40);
+  oled.setFont(u8g2_font_6x12_tr);
+  snprintf(line, sizeof(line), "In range: %d", peersInRange());
+  oled.drawStr(2, 56, line);
   oled.sendBuffer();
 }
 
@@ -192,6 +240,7 @@ void loop() {
         Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f data='%.*s'\n", src, seq, len,
                       (double)radio.getRSSI(), len - MAC_HEADER, (const char *)&buf[MAC_HEADER]);
         if (src != nodeId) {        // ignore our own echo
+          notePeer(src);            // a ZyPico device heard directly = in range
           ws.binaryAll(buf, len);   // forward [srcId][seq][payload] to the browser
           serialEmitFrame(buf, len); // …and to the serial test harness
         }
@@ -201,6 +250,24 @@ void loop() {
   }
 
   ws.cleanupClients();
+
+  // USER button toggles the OLED between the logo splash and the info screen.
+  static bool prevDown = false;
+  static uint32_t lastPress = 0;
+  bool down = digitalRead(PIN_USER_BTN) == LOW;
+  if (down && !prevDown && millis() - lastPress > 50) {
+    lastPress = millis();
+    showInfo = !showInfo;
+    if (showInfo) drawInfo(); else drawSplashOled();
+  }
+  prevDown = down;
+
+  // While the info screen is up, refresh it so the in-range count stays current.
+  static uint32_t lastInfo = 0;
+  if (showInfo && millis() - lastInfo > 2000) {
+    lastInfo = millis();
+    drawInfo();
+  }
 
   // USB-serial input. A magic-framed binary frame (0xAA55 [len][frame]) is queued
   // for transmit exactly like a WebSocket frame — this is the test-harness path.
