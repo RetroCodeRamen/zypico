@@ -169,21 +169,28 @@ Arcade, Exchange, Profile); **activity stars**; people-first presence language
 ("Traveler Nearby"). _Exit: nav matches DESIGN §6; no node tech in the UI._
 
 **M3 — The Wisp comes alive.** Wisp interaction area (Feed/Treat/Play/Clean/Rest/
-Talk) on the new **Bond/Mood** axis; wire **real Hearts hooks** (participation →
-hearts), retire the dev raise. _Exit: care moves mood; activity grows hearts; both visible._
+Talk) on the new **Bond/Mood** axis (personality/animation/dialogue/emotion);
+**the Wisp lives its life** — it notices passing Travelers + Stations it hears
+about and **shares discoveries** on return; non-punitive mood decay (never dies).
+Wire **real Hearts hooks** (participation → hearts), retire the dev raise.
+_Exit: care moves mood; the Wisp recounts what it saw; activity grows hearts._
 
-**M4 — The Commons.** Presence v2 (60 s / 5 min; Wisp form + location); activity
-feed; discovery; reachability model. _Exit: entering the Commons shows live signs of life._
+**M4 — The Commons + the living mesh.** Presence v2 (60 s / 5 min; Wisp form +
+location); **multi-hop repeating baseline** (hop-limit 3, every board repeats) +
+the **Nearby vs Relay Travelers** distinction; activity feed; discovery;
+reachability model; activity stars. _Exit: a relayed traveler two hops away appears in your Commons; entering shows live signs of life._
 
 **M5 — Traveler Pages + Guestbooks.** Author/edit a small page (About/Pixel Art/
 Notes/Achievements) locally; Guestbook; view others'. _Exit: build a page, sign another's guestbook over the mesh._
 
-**M6 — Chat vs Mail split.** Chat reachability-gated (history persists);
-**Mail store-and-forward** with outbox (delivers via a Station). _Exit: chat goes quiet when a peer leaves; mail waits + delivers through a Station._
+**M6 — Chat vs Mail split.** Chat reachability-gated (history persists; **DM→Mail
+prompt** when a peer is unreachable, never silent); Commons hybrid history (10
+without a Station); **Mail store-and-forward** outbox (delivers via a Station).
+_Exit: chat goes quiet when a peer leaves and offers Mail; mail waits + delivers through a Station._
 
-**M7 — Stations.** **Station Mode** (repeating with hop-limit; Mail relay; Page
-hosting; **Account Vault** backups; admin login). Light Station on Heltec.
-_Exit: a Station repeats range, forwards mail, hosts a page, stores an encrypted vault._
+**M7 — Stations.** **Station Mode** on Heltec (admin login w/ separate creds);
+Mail relay; Page hosting; **Account Vault** backups; Commons memory (50 msgs);
+Station service beacons. (Repeating already shipped in M4.) _Exit: a Station forwards mail, hosts a page, stores an encrypted vault, deepens the Commons._
 
 **M8 — Making + the Exchange.** Lua **Cart** runtime + sandbox; authoring;
 **Exchange** (items/themes/Carts/content); participation economy. _Exit: author a Cart, share + run it sandboxed; buy a cosmetic._
@@ -195,8 +202,10 @@ _Exit: a Station repeats range, forwards mail, hosts a page, stores an encrypted
 internet **federation**: Page sync, vault backup, mail bridging between
 neighborhoods). _Exit: two neighborhoods bridged by internet Stations; same app on a T-Deck._
 
-**Cross-cutting (early):** a frame **hop-limit/TTL** field for repeating; the
-**location namespace** for presence + travel; persistence (M1) underpins M4–M7.
+**Cross-cutting:** the frame **hop-limit/TTL** field lands with M4's baseline
+repeater (multi-hop is day-one, not deferred); the **location namespace** (=
+current Place) rides presence v2; persistence (M1) underpins M3–M7. **US 915
+only** for now.
 
 ---
 

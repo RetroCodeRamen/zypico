@@ -66,20 +66,32 @@ are made, Wisps are seen, local activity becomes visible.
 → Ed25519; X25519 for sealing). No server, no reset; the fingerprint is the
 address. (Implemented; see v2 §9.3 and `core/identity`.)
 
-**Wisps** are the companion (v2 §3 for the full model). Two **independent axes** —
-this is the key reconciliation of the new Wisp-care direction with the old
-anti-grind guardrail:
+**Wisps** are the companion (v2 §3 for the full model). Two **independent
+systems** — this reconciles the Wisp-care direction with the anti-grind guardrail:
 
 - **Hearts → Evolution (identity).** The five Hearts (Signal, Arena, Journey,
   Broadcast, Craft) are **earned only through participation** and drive the
   1→2→4→8 evolution tree + drift. **Care never buys Hearts.** (Unchanged from v2.)
-- **Bond / Mood (warmth).** A separate axis moved by **care**: Feed, Treat, Play,
-  Clean, Rest, Talk. Care affects the Wisp's **mood, animations, and idle
-  behavior** — never evolution, never death (a neglected Wisp gets dim/sad, not
-  gone). This is the Tamagotchi loop.
+- **Bond / Mood (warmth).** A separate system moved by **care** (Feed, Treat,
+  Play, Clean, Rest, Talk). Bond/Mood drives the Wisp's **personality,
+  animations, reactions, dialogue, and emotional state** — never evolution.
 
 So: **who your Wisp *is*** comes from how you participate; **how your Wisp
-*feels*** comes from how you care for it. Both are visible in the Wisp area.
+*feels*** comes from how you care for it.
+
+**Neglect — warmth, not anxiety.** A Wisp **never dies, never loses an evolution
+stage, never permanently regresses.** Mood uses **gentle, slow decay** and is
+**not** punishment-based. A long-neglected Wisp simply becomes **lonely / sad,
+moves less, animates differently**, and may **mention it missed you** — then
+brightens when you return.
+
+**The Wisp lives its life (the mesh, felt through the companion).** While you're
+away, the Wisp keeps living in the Relay: it **notices passing Travelers, hears
+about Stations, and collects little discoveries.** On your return it **shares
+what it saw** — "I spotted a traveler named WonkyTanuki," "I heard about a Station
+to the south," small journal moments. This is how the **mesh becomes emotionally
+legible** — presence and activity the device hears become the Wisp's stories,
+not a notification list.
 
 ---
 
@@ -108,11 +120,10 @@ A device runs in one of two modes:
 - A **full Station** = a bigger class of device (e.g. Raspberry Pi + LoRa) with
   real storage, web hosting, and an internet gateway.
 
-**Mode switching** is an administrative/firmware setting (config menu or build
-flag), gated behind Station admin login — not a casual toggle. _Open: exact
-switch mechanism (physical vs. menu vs. separate firmware) — decide at Station
-bring-up; favor a config/admin setting on shared hardware, dedicated firmware
-for full Stations._
+**Decided:** the **first Station is a Station *mode* on existing Heltec hardware**
+(fast to test/deploy) — switched via an **administrative setting**, gated behind
+**Station admin login** (separate credentials + auth model from any Traveler
+identity). Dedicated full-Station firmware (Pi-class) comes later.
 
 ### 3.2 Station administration
 In Station Mode, an **admin login** (separate from Traveler identity) exposes
@@ -133,29 +144,50 @@ ownership). Presence is how the world feels **inhabited**.
 The UI speaks in **people**, never node tech: "Traveler Nearby," "New Traveler
 Found," "Wisp Spotted," "Traveler Page Available" — never "node !a09e found."
 
+**Nearby Travelers vs. Relay Travelers** (worldbuilding, not networking jargon):
+- **Nearby Travelers** — heard **directly**, within immediate radio range.
+- **Relay Travelers** — reached **through one or more mesh hops** (other devices /
+  Stations relaying). Present, part of your world, just **further out**.
+
+This makes the Relay feel **larger than radio range while still local** — you
+sense a community beyond the people right next to you, with no internet involved.
+The UI surfaces it as a soft sense of distance ("Nearby" vs "across the Relay"),
+never as hop counts.
+
 ### 4.2 Reachability
 "Can I reach Traveler X **right now**?" = _did I hear X's presence within the
-5-min window_ (directly or via a repeating Station). Reachability gates **Chat**.
+5-min window_ (directly = Nearby, or via hops = Relay). Reachability gates **Chat**.
 
-### 4.3 Repeating (multi-hop)
-Stations **repeat** frames to extend reach. This requires a **hop-limit / TTL**
-in the frame (a new field — today's link is single-hop) plus dedupe (have it) so
-repeats don't loop or saturate. Repeating runs under the **airtime governor**.
+### 4.3 Repeating (multi-hop — baseline, from day one)
+**Multi-hop is on from the start, not deferred to Stations.** Every ZyPico board
+(Traveler firmware included) **repeats** frames within a **hop limit of 3**, so
+the world feels inhabited even when adopters are sparse — no Stations or internet
+required. Stations simply repeat with more range/uptime. Requires a **hop-limit /
+TTL field** in the frame (new — today's link is single-hop) + the existing dedupe
+so repeats never loop; all repeating runs under the **airtime governor**. The hop
+limit is protocol-adjustable for future tuning.
 
 ### 4.4 Communication is two distinct systems
 - **Chat — immediate.** Exists only while Travelers can currently reach each
-  other through the mesh. If reachability is lost, Chat becomes unavailable
-  (history stays visible); further contact requires Mail. Chat feels like AIM /
-  Cybiko messaging / walkie-talkies. Local + immediate. Includes the **Commons**
-  (public local chat) and **live DMs** (private, E2E) when both are reachable.
-- **Mail — persistent.** The **only** Traveler-to-Traveler system that moves
-  **between Stations**. Write → outbox → reaches a Station → Station forwards →
-  eventually arrives. Encrypted end-to-end and **stored encrypted at rest** on
-  Stations (vault pattern). Mail feels like **letters traveling through the
-  Relay.** The Post is distinct from Chat.
+  other through the mesh (Nearby or Relay). Includes the **Commons** (public local
+  chat) and **live private DMs** (E2E). If a peer goes unreachable, Chat to them
+  becomes unavailable — history stays visible, and the UI offers a **prompt**:
+  _"Traveler unavailable. Send as Mail instead?"_ Chat is **never silently
+  converted** to Mail — the distinction stays visible. Chat feels like AIM /
+  Cybiko / walkie-talkies.
+- **Mail — persistent, private.** The **only** Traveler-to-Traveler system that
+  moves **between Stations** (store-and-forward). Write → outbox → reaches a
+  Station → forwarded → eventually arrives. Encrypted E2E and **stored encrypted
+  at rest** on Stations (vault pattern). Mail feels like **letters traveling
+  through the Relay.**
 
-_Implication:_ with no Station in the path, Mail simply waits in the outbox —
-Chat still works locally. This is intended.
+_Implication:_ with no Station in the path, Mail waits in the outbox — Chat still
+works locally. Intended.
+
+**Commons history (hybrid).** Without a Station, the Commons keeps **~10 recent
+messages** (a live gathering place, not a forum). With a Station present, the
+Station acts as local memory and the Commons keeps **~50** scrollable. Either
+way it stays a **town square**, not a traditional forum.
 
 ### 4.5 Airtime reality
 LoRa duty cycle + presence-every-60 s means a neighborhood realistically holds a
@@ -221,10 +253,10 @@ destination. The freed slot becomes the **Wisp** interaction area.
 | **The Exchange** | items · themes · Carts · content |
 | **Profile** | identity · settings |
 
-_Open items:_ **Craft (Cart authoring)** lands inside Exchange/Pages tooling
-rather than a top icon; **Quests / exploration / travel to Stations** is reached
-**through the Commons** (a travel action), not a ninth icon. **Home/landing = your
-Wisp** (always alive, local); the Commons is a place you step into. ← confirm.
+**Decided:** **Home/landing = your Wisp** (always alive, local) — you *live with*
+your Wisp and *travel into* the Relay. **Craft (Cart authoring)** lives inside
+Exchange/Pages tooling, not a top icon. **Quests / exploration / travel to
+Stations** is reached **through the Commons** (a travel action), not a ninth icon.
 
 ### 6.3 Friends — "I met this traveler"
 Friends are **people encountered during travels**, not address-book contacts.
@@ -271,15 +303,22 @@ ciphertext and never see passwords.
 
 ---
 
-## 8. Open questions to resolve before/at implementation
+## 8. Decisions locked + remaining detail
 
-1. **Wisp axes** — confirm Hearts(evolution) vs Bond(care) split (§2).
-2. **Home/landing** — Wisp vs Commons (§6.2).
-3. **Craft + Quests placement** now that they're off the primary nav (§6.2).
-4. **Station mode switch** mechanism + the light-vs-full Station hardware line (§3.1).
-5. **Location namespace** — what a "current location" is, and how Places are named
-   across a neighborhood (needed for presence "current location" + travel).
-6. **Mail addressing across Stations** — how a Station knows where to forward, and
-   for how long it holds undelivered mail.
-7. **Repeating policy** — hop limit value, dedupe window, governor budget for
-   repeats so a busy neighborhood doesn't saturate.
+**Locked (2026-06-22):** two-axis Wisp (Hearts=evolution / Bond=care); Wisp never
+dies, gentle non-punitive mood decay, "lives its life" + shares discoveries; home
+= Wisp; eight Places; Craft under Exchange/Pages; travel via the Commons; Chat vs
+Mail split with a DM→Mail prompt; Mail private-only; Commons history 10/50
+(without/with Station); first Station = admin mode on Heltec; full Station later;
+US 915 only; presence 60 s / 5-min; **multi-hop from day one, hop limit 3, all
+boards repeat**; Nearby vs Relay Travelers; location = current Place; local
+neighborhoods bridged optionally by internet Stations; local encrypted
+export/import first, Station Vaults later; multiple identities per device;
+**start with M1 (architecture).**
+
+**Remaining implementation detail (resolve at the relevant milestone):**
+- **Mail addressing/retention** — how a Station decides where to forward and how
+  long it holds undelivered mail (M6/M7).
+- **Repeating tuning** — dedupe window + governor budget so a busy neighborhood
+  doesn't saturate, beyond the hop-limit of 3 (done with the baseline repeater).
+- **Station service advertisement** — what a Station beacon announces (M7).
