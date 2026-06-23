@@ -1,5 +1,14 @@
 # The Relay — Complete Project Outline (v2)
 
+> ⚠️ **Superseded for direction by [docs/DESIGN.md](docs/DESIGN.md) (v3).** This
+> document is retained for **mechanics depth** (the five Hearts, the evolution
+> tree, crypto specifics, surface grammar). Where it disagrees with DESIGN.md,
+> DESIGN wins — notably: ZyPico is **mesh-first peer-to-peer** (not Meshtastic-
+> dependent, not a node-attached PWA — it now runs on its own board firmware);
+> **Stations are physical infrastructure nodes**, not UI containers; navigation,
+> the Chat/Mail split, the Wisp care axis, Traveler Pages, and Vaults are all
+> redefined in DESIGN.
+
 > A retro-inspired social handheld where a small living community fits in your pocket. All communication runs over a LoRa mesh (Meshtastic). The first build target is a browser-based web app (PWA) that connects directly to a local Meshtastic node; the end target is a dedicated handheld device.
 
 This document describes the **finished product**, not a first milestone. It is the full feature surface, the lore that motivates it, the technical constraints that shape it, and a build roadmap that reaches the end state. An implementing agent should treat the end state as the goal and use the roadmap only to sequence the work.

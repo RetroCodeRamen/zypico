@@ -4,7 +4,7 @@
 
 _Status: draft v1 · Last updated 2026-06-20_
 
-**Related docs:** [The-Relay-Outline-v2.md](The-Relay-Outline-v2.md) (product spec) · [The-Relay-Screens.html](The-Relay-Screens.html) (visual reference — Home, Instant Messenger, Lua editor, Onboarding) · [docs/protocol.md](docs/protocol.md) (RelayProtocol wire spec) · [docs/adr/](docs/adr/) (decision records).
+**Related docs:** [docs/DESIGN.md](docs/DESIGN.md) (**canonical design direction, v3** — read first) · [The-Relay-Outline-v2.md](The-Relay-Outline-v2.md) (background mechanics; superseded by DESIGN for direction) · [The-Relay-Screens.html](The-Relay-Screens.html) (visual reference) · [docs/protocol.md](docs/protocol.md) (RelayProtocol wire spec) · [docs/adr/](docs/adr/) (decision records).
 
 **Build progress (last updated 2026-06-22 · 89 unit tests passing):**
 
@@ -142,57 +142,61 @@ MeshTransport facade  →  { HttpTransport | BleTransport | SerialTransport | Ha
 
 ---
 
-## 8. Phased delivery plan
+## 8. Roadmap
 
-Phases sequence the outline's roadmap (§15) with concrete deliverables and exit criteria. Sizing is rough (S/M/L); calendar dates TBD once team/cadence is set. Each phase ends in a demoable state.
+Milestones now follow the v3 direction ([docs/DESIGN.md](docs/DESIGN.md)). Each
+ends in a demoable, on-hardware state. **Deployment is mesh-first**: ZyPico runs
+on the board (Traveler firmware), browser does UI + protocol; Stations come later.
 
-### Phase 0 — Project setup (S)
-- Repo, package layout, TS strict, lint/format, CI (unit tests), framework + crypto-lib decisions recorded as ADRs.
-- Protobuf/TLV generation pipeline; asset pipeline for icons (vector) and 128×80 sprites.
-- **Exit:** `npm test` + a blank PWA installs and runs; ADRs for React-vs-Svelte and crypto lib committed.
+### Shipped
+- **Setup + protocol spine** — Vite/React/TS, Vitest; RelayProtocol (frame, HLC, dedupe, fragmentation, airtime governor); `RelayClient`. **Validated on two real Heltec V3 boards: bidirectional LoRa at 915 MHz.**
+- **Board firmware (ADR 0004)** — WiFi-AP, serves UI from flash, WebSocket↔SX1262, OLED, one-device, unique per-board SSID.
+- **Identity (Phase 2)** — login gate (Argon2id→Ed25519, offline, no reset); signed **presence**; **E2E DMs** (X25519 + XChaCha20).
+- **UI shell** — 128×80 Tamagotchi LCD, 3 buttons, on-screen keyboard, scale-to-fit, SFX.
+- **Companion engine** — five Hearts, full evolution tree + drift; per-identity persistence; procedural animated Wisp.
+- **Social** — discovery → buddies → encrypted DMs; basic **Commons** public chat (HLC-ordered, app-deduped).
 
-### Phase 1 — Transport + spine (L)
-- `MeshTransport` facade + `HttpTransport`; connect to a real node.
-- `RelayProtocol`: common header (version + sub-type + signature space), fragmentation + selective-repeat + resume, dedupe, ACK/NACK, **airtime governor** (prioritized queue + region-aware token bucket + adaptive backpressure), store-and-forward outbox, HLC ordering.
-- Companion data model + IndexedDB stores.
-- **Exit:** two real nodes round-trip a multi-fragment message reliably; governor keeps within a conservative airtime budget; unknown sub-types/versions are skipped.
+### Forward (v3)
 
-### Phase 2 — Identity & crypto (M)
-- Argon2id derivation, Ed25519 signing, X25519 E2E; TOFU key pinning; petnames.
-- Onboarding/first-run (handle + password → identity; "no reset" warning; node pairing; hatch Flicker).
-- **Exit:** create identity offline, connect a node, sign + verify a profile beacon, send an E2E DM between two nodes; re-deriving the same credentials reproduces the same identity.
+**M1 — Structural foundation.** Extract a **domain layer** out of `App.tsx`
+(`useIdentity`/`useRelay`/`useSocial`/`useCompanion` or stores); drop the dead
+`@meshtastic/*` deps + shims; introduce a **persistence layer** (IndexedDB/Dexie)
+so DMs/rooms/Wisp survive reload. _Exit: App is thin composition; nothing lost on reload._
 
-### Phase 3 — Core social (M)
-- Profiles, presence (coalesced beacons), IM, Mail, friend list, organic discovery (§8.1), QR/short-code add.
-- **Exit:** two travelers discover each other, add as friends, exchange IM + mail (E2E), see last-seen — all over LoRa.
+**M2 — Worldify the shell.** Remove **Radio** (connectivity → ambient status);
+restructure nav to the eight **Places** (Commons, Travelers, Post, Pages, Wisp,
+Arcade, Exchange, Profile); **activity stars**; people-first presence language
+("Traveler Nearby"). _Exit: nav matches DESIGN §6; no node tech in the UI._
 
-### Phase 4 — Communities (M)
-- The Broadcast (default + user boards), HLC-ordered threads, owner-authoritative moderation + delegates, personal block/mute, opt-in shareable blocklists.
-- **Exit:** post/reply propagates and orders sensibly across nodes; an owner moderation action is honored by other clients.
+**M3 — The Wisp comes alive.** Wisp interaction area (Feed/Treat/Play/Clean/Rest/
+Talk) on the new **Bond/Mood** axis; wire **real Hearts hooks** (participation →
+hearts), retire the dev raise. _Exit: care moves mood; activity grows hearts; both visible._
 
-### Phase 5 — Companion life (L)
-- Hearts engine (local activity → hearts), 1→2→4→8 evolution tree, drift, lineage chain, gift (custody transfer) + release, menagerie, encrypted export/import (backup + migration).
-- **Exit:** participation raises hearts and evolves a Wisp; a Wisp is gifted to another identity (lineage intact) and keeps growing; export on one device → import on another.
+**M4 — The Commons.** Presence v2 (60 s / 5 min; Wisp form + location); activity
+feed; discovery; reachability model. _Exit: entering the Commons shows live signs of life._
 
-### Phase 6 — Play (L)
-- Deterministic game engine (shared-seed), Arcade (Chess, Tic-Tac-Toe), then Relay Arena (Trials/Focus, countersigned results).
-- **Exit:** a full game and a full bout resolve identically on both nodes with no referee; bout produces a countersigned result feeding an award.
+**M5 — Traveler Pages + Guestbooks.** Author/edit a small page (About/Pixel Art/
+Notes/Achievements) locally; Guestbook; view others'. _Exit: build a page, sign another's guestbook over the mesh._
 
-### Phase 7 — World (M)
-- Stations, travel UI, Journey heart, quest system (data + later Cart-driven).
-- **Exit:** travel between Stations registers Journey progress; a simple quest can be defined, propagated, and completed.
+**M6 — Chat vs Mail split.** Chat reachability-gated (history persists);
+**Mail store-and-forward** with outbox (delivers via a Station). _Exit: chat goes quiet when a peer leaves; mail waits + delivers through a Station._
 
-### Phase 8 — Making / Craft (L)
-- Lua runtime + Web Worker sandbox + Relay SDK (deny-by-default, resource limits); Cart authoring editor; sharing (direct push + advertise-then-pull manifest); content-hash provenance; then quests-as-Carts, guides, clubs (private Stations w/ shared key), events, decorations.
-- **Exit:** author a Cart on node A, publish via manifest, pull + verify + run sandboxed on node B; sandbox blocks all host/network/storage access; runaway script is aborted.
+**M7 — Stations.** **Station Mode** (repeating with hop-limit; Mail relay; Page
+hosting; **Account Vault** backups; admin login). Light Station on Heltec.
+_Exit: a Station repeats range, forwards mail, hosts a page, stores an encrypted vault._
 
-### Phase 9 — Economy (M)
-- Tokens (participation-earned), gifting/barter, The Exchange (reputation-gated).
-- **Exit:** earn tokens, buy a cosmetic, gift content/Wisp/cosmetic to another traveler.
+**M8 — Making + the Exchange.** Lua **Cart** runtime + sandbox; authoring;
+**Exchange** (items/themes/Carts/content); participation economy. _Exit: author a Cart, share + run it sandboxed; buy a cosmetic._
 
-### Phase 10 — Hardware bring-up (L)
-- `HardwareTransport` for the T-Deck SX1262; device-served UI; trackball/QWERTY input mapping; 320×240 native layout pass.
-- **Exit:** the same app runs on a T-Deck using its on-board radio, no separate node.
+**M9 — Play.** Deterministic Arcade games head-to-head over LoRa; Arena bouts
+(the Hearts as play). _Exit: a full game resolves identically on two boards, no referee._
+
+**M10 — Breadth.** T-Deck (on-device screen); **full Station** (Pi-class storage +
+internet **federation**: Page sync, vault backup, mail bridging between
+neighborhoods). _Exit: two neighborhoods bridged by internet Stations; same app on a T-Deck._
+
+**Cross-cutting (early):** a frame **hop-limit/TTL** field for repeating; the
+**location namespace** for presence + travel; persistence (M1) underpins M4–M7.
 
 ---
 
