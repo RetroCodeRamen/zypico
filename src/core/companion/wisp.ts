@@ -9,6 +9,7 @@
 // unit-tests with no DOM. Thresholds are tunable (plan §13 open items).
 
 import { emptyHearts, type Heart, type Hearts, totalHearts } from "./hearts.ts";
+import { freshMood, type Mood } from "./mood.ts";
 
 export type Tier = 1 | 2 | 3 | 4;
 
@@ -104,12 +105,14 @@ export interface Wisp {
   /** Traveler-given name; empty until named at hatch. */
   name: string;
   hearts: Hearts;
+  /** Warmth system (care/feel) — independent of hearts/evolution (DESIGN §2). */
+  mood: Mood;
   /** Epoch ms when the Wisp awoke from drift. */
   bornAt: number;
 }
 
 export function createWisp(now: () => number = Date.now): Wisp {
-  return { name: "", hearts: emptyHearts(), bornAt: now() };
+  return { name: "", hearts: emptyHearts(), mood: freshMood(now), bornAt: now() };
 }
 
 /** Add participation to one heart (immutable). The only way a Wisp grows. */

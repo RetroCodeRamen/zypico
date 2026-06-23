@@ -9,6 +9,22 @@ export {
   type Hearts,
 } from "./hearts.ts";
 export {
+  applyCare,
+  CARE_DEFS,
+  CARES,
+  comfort,
+  freshMood,
+  MOOD_MAX,
+  MOOD_STATE_DEFS,
+  moodState,
+  settleMood,
+  type Care,
+  type CareDef,
+  type Mood,
+  type MoodState,
+  type MoodStateDef,
+} from "./mood.ts";
+export {
   applyActivity,
   createWisp,
   deriveForm,

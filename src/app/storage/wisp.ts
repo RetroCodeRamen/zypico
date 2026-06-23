@@ -4,7 +4,7 @@
 // localStorage for now; the plan's home for this is IndexedDB via Dexie (plan
 // §4). Keeping it behind these two functions means that swap is local later.
 
-import { createWisp, type Wisp } from "@core/companion/index.ts";
+import { createWisp, freshMood, type Wisp } from "@core/companion/index.ts";
 
 // The Wisp is scoped to the traveler's identity (fingerprint), so different
 // logins on one device keep separate companions (outline §2: Traveler → Wisp).
@@ -15,7 +15,7 @@ export function loadWisp(fingerprint: string): Wisp {
     const raw = localStorage.getItem(keyFor(fingerprint));
     if (raw) {
       const parsed = JSON.parse(raw) as Wisp;
-      // Tolerate older/partial saves by filling any missing hearts.
+      // Tolerate older/partial saves by filling any missing hearts + mood.
       return {
         name: parsed.name ?? "",
         bornAt: parsed.bornAt ?? Date.now(),
@@ -26,6 +26,7 @@ export function loadWisp(fingerprint: string): Wisp {
           broadcast: parsed.hearts?.broadcast ?? 0,
           craft: parsed.hearts?.craft ?? 0,
         },
+        mood: parsed.mood ?? freshMood(),
       };
     }
   } catch {
