@@ -8,6 +8,14 @@
 //   browser -> board (binary): a RelayProtocol frame to transmit (payload only).
 //   board -> browser (binary): a heard packet = [srcId:u32 BE][seq:u16 BE][payload].
 //   board -> browser (text)  : {"type":"hello","nodeId":<u32>} on connect.
+//
+// USB-serial bridge (for the automated two-board test harness — host can drive
+// both boards at once over USB, which WiFi can't). Magic-framed binary, carried
+// alongside the human-readable debug logs; the host locks onto the 0xAA55 sync
+// and ignores the text. Same payload contract as the WebSocket:
+//   host  -> board : 0xAA 0x55 [len:u16 BE] [RelayProtocol frame]      (transmit)
+//   board -> host  : 0xAA 0x55 [len:u16 BE] [srcId:4][seq:2][payload]  (heard)
+// A plain text line (no magic) is still transmitted as-is — the old debug path.
 
 #include <Arduino.h>
 #include <WiFi.h>
@@ -64,6 +72,17 @@ struct TxMsg {
 static QueueHandle_t txQueue;
 
 static void showOled();
+
+// Magic-framed binary on USB serial, for the test harness (see header comment).
+static const uint8_t SERIAL_MAGIC0 = 0xAA;
+static const uint8_t SERIAL_MAGIC1 = 0x55;
+
+// Emit a heard packet to the host as a magic-framed binary frame.
+static void serialEmitFrame(const uint8_t *buf, int len) {
+  uint8_t hdr[4] = {SERIAL_MAGIC0, SERIAL_MAGIC1, (uint8_t)(len >> 8), (uint8_t)(len & 0xff)};
+  Serial.write(hdr, sizeof(hdr));
+  Serial.write(buf, len);
+}
 
 ICACHE_RAM_ATTR void onLoraRx() { rxFlag = true; }
 
@@ -174,6 +193,7 @@ void loop() {
                       (double)radio.getRSSI(), len - MAC_HEADER, (const char *)&buf[MAC_HEADER]);
         if (src != nodeId) {        // ignore our own echo
           ws.binaryAll(buf, len);   // forward [srcId][seq][payload] to the browser
+          serialEmitFrame(buf, len); // …and to the serial test harness
         }
       }
     }
@@ -182,26 +202,55 @@ void loop() {
 
   ws.cleanupClients();
 
-  // Debug: a line typed on USB serial is transmitted over LoRa, exactly like a
-  // message sent from the browser (harmless in the field — no serial input there).
+  // USB-serial input. A magic-framed binary frame (0xAA55 [len][frame]) is queued
+  // for transmit exactly like a WebSocket frame — this is the test-harness path.
+  // Any other line of text is still transmitted as-is (the old debug path). One
+  // byte-at-a-time state machine handles both without one corrupting the other.
+  static uint8_t serState = 0;          // 0 idle, 1 saw magic0, 2 len-hi, 3 len-lo, 4 body
+  static uint16_t binLen = 0, binGot = 0;
+  static uint8_t binBuf[MAC_HEADER + MAX_PAYLOAD];
   static char line[80];
   static int n = 0;
+  auto flushTextLine = [&]() {
+    if (n > 0) {
+      uint8_t buf[MAC_HEADER + sizeof(line)];
+      txSeq++;
+      buf[0] = nodeId >> 24; buf[1] = nodeId >> 16; buf[2] = nodeId >> 8; buf[3] = nodeId;
+      buf[4] = txSeq >> 8; buf[5] = txSeq;
+      memcpy(buf + MAC_HEADER, line, n);
+      radio.transmit(buf, MAC_HEADER + n);
+      radio.startReceive();
+      Serial.printf("TX seq=%u '%.*s'\n", txSeq, n, line);
+      n = 0;
+    }
+  };
   while (Serial.available()) {
-    char c = (char)Serial.read();
-    if (c == '\n' || c == '\r') {
-      if (n > 0) {
-        uint8_t buf[MAC_HEADER + sizeof(line)];
-        txSeq++;
-        buf[0] = nodeId >> 24; buf[1] = nodeId >> 16; buf[2] = nodeId >> 8; buf[3] = nodeId;
-        buf[4] = txSeq >> 8; buf[5] = txSeq;
-        memcpy(buf + MAC_HEADER, line, n);
-        radio.transmit(buf, MAC_HEADER + n);
-        radio.startReceive();
-        Serial.printf("TX seq=%u '%.*s'\n", txSeq, n, line);
-        n = 0;
-      }
-    } else if (n < (int)sizeof(line)) {
-      line[n++] = c;
+    uint8_t c = (uint8_t)Serial.read();
+    switch (serState) {
+      case 0:
+        if (c == SERIAL_MAGIC0) serState = 1;
+        else if (c == '\n' || c == '\r') flushTextLine();
+        else if (n < (int)sizeof(line)) line[n++] = (char)c;
+        break;
+      case 1: // saw magic0
+        if (c == SERIAL_MAGIC1) serState = 2;
+        else { serState = 0; if (c == '\n' || c == '\r') flushTextLine(); else if (n < (int)sizeof(line)) line[n++] = (char)c; }
+        break;
+      case 2: binLen = (uint16_t)c << 8; serState = 3; break;
+      case 3:
+        binLen |= c; binGot = 0;
+        serState = (binLen == 0 || binLen > sizeof(binBuf)) ? 0 : 4; // drop absurd lengths
+        break;
+      case 4:
+        binBuf[binGot++] = c;
+        if (binGot >= binLen) {
+          TxMsg msg;                     // queue like a WS frame; loop() stamps src/seq
+          msg.len = binLen > MAX_PAYLOAD ? MAX_PAYLOAD : (uint8_t)binLen;
+          memcpy(msg.data, binBuf, msg.len);
+          xQueueSend(txQueue, &msg, 0);
+          serState = 0;
+        }
+        break;
     }
   }
 
