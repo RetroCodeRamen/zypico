@@ -6,7 +6,7 @@ _Status: draft v1 · Last updated 2026-06-20_
 
 **Related docs:** [docs/DESIGN.md](docs/DESIGN.md) (**canonical design direction, v3** — read first) · [The-Relay-Outline-v2.md](The-Relay-Outline-v2.md) (background mechanics; superseded by DESIGN for direction) · [The-Relay-Screens.html](The-Relay-Screens.html) (visual reference) · [docs/protocol.md](docs/protocol.md) (RelayProtocol wire spec) · [docs/adr/](docs/adr/) (decision records).
 
-**Build progress (last updated 2026-06-23 · 100 unit tests passing):**
+**Build progress (last updated 2026-06-23 · 104 unit tests passing):**
 
 **Deployment shape (settled — ADR 0004).** ZyPico runs on the **device itself**: a
 **Heltec WiFi LoRa 32 V3** flashed with custom firmware (`firmware/heltec-v3/`)
@@ -30,8 +30,9 @@ Web Bluetooth, HTTP-to-node) were removed in the cleanup — see git history / A
 - **M1 — Structural foundation (done 2026-06-23).** Dropped dead `@meshtastic/*` deps + shims. Decomposed `App.tsx` (591→320 lines) into a **domain-hook layer** (`useIdentity`/`useRelay`/`useSocial`/`useCompanion` + `useViewportScale`/`useMuted`); App is now thin composition + the button/nav controller. **Persistence**: DM threads + chatroom now survive reload (per-fingerprint `localStorage`, swappable for Dexie behind the storage seam).
 - **M2 — Worldify the shell (done 2026-06-23).** Eight Places (Commons/Travelers/Post/Pages/Wisp/Arcade/Exchange/Profile); **Radio removed** → ambient connectivity (home `=RELAY`/`OFFLINE` glyph; re-link under Profile › RELAY); **Wisp is a Place** (home stays the living Wisp); **activity stars** brighten with nearby count; new place icons.
 - **M3 — the Wisp comes alive (done 2026-06-23).** **Bond/Mood** warmth system (`core/companion/mood.ts`), separate from Hearts — six care actions (Feed/Treat/Play/Clean/Rest/Talk) move gently-decaying need meters + a slow Bond; non-punitive (never dies, "I missed you" after a long absence). Wisp Place leads with **care** (stats + journal behind). **Real activity→Hearts** wired (post→Broadcast, DM→Signal, buddy/discovery→Signal/Journey); dev raise retired. The Wisp **lives its life** — records passing Travelers as **discoveries**, recounts them in a JOURNAL panel + voices them on the idle home, which also reflects mood (motion + dialogue).
+- **M4 — the Commons + the living mesh (done 2026-06-23).** First real protocol change: the common header grew to carry a **hop limit + stable msg id** (3→8 bytes, minor 2), so dedupe is network-wide and the spine **repeats on raw bytes** (range for any sub-type). `RelayClient` is the **baseline repeater** (hop-limit 3, governor-paced, loops/echoes dropped) and surfaces hops travelled. **Presence v2** beacons carry the **Wisp form + location**, signed, every 60 s; heard Travelers are tagged **Nearby vs Relay** and filtered to the 5-min reachable window. The **Commons shows live signs of life** ("N HERE"). Firmware unchanged — the repeater is the carried phone's `RelayClient`.
 
-**Next:** **M4 — the Commons + the living mesh** (presence v2 with Wisp form + location; **multi-hop repeating baseline** hop-limit 3 + Nearby/Relay Travelers; activity feed/discovery). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults (M7) need it.
+**Next:** **M5 — Traveler Pages + Guestbooks** (author/edit a small page; browse others'; sign a guestbook). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults (M7) need it.
 
 **Design status:** the spec is build-ready. Identity/crypto, transport/mesh, companion model, sandbox, and the visual system are all decided. Four screens are designed and the surface grammar is proven. Remaining unknowns are best resolved during implementation, not further outlining.
 
