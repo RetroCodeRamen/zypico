@@ -32,6 +32,14 @@ Web Bluetooth, HTTP-to-node) were removed in the cleanup — see git history / A
 - **M3 — the Wisp comes alive (done 2026-06-23).** **Bond/Mood** warmth system (`core/companion/mood.ts`), separate from Hearts — six care actions (Feed/Treat/Play/Clean/Rest/Talk) move gently-decaying need meters + a slow Bond; non-punitive (never dies, "I missed you" after a long absence). Wisp Place leads with **care** (stats + journal behind). **Real activity→Hearts** wired (post→Broadcast, DM→Signal, buddy/discovery→Signal/Journey); dev raise retired. The Wisp **lives its life** — records passing Travelers as **discoveries**, recounts them in a JOURNAL panel + voices them on the idle home, which also reflects mood (motion + dialogue).
 - **M4 — the Commons + the living mesh (done 2026-06-23).** First real protocol change: the common header grew to carry a **hop limit + stable msg id** (3→8 bytes, minor 2), so dedupe is network-wide and the spine **repeats on raw bytes** (range for any sub-type). `RelayClient` is the **baseline repeater** (hop-limit 3, governor-paced, loops/echoes dropped) and surfaces hops travelled. **Presence v2** beacons carry the **Wisp form + location**, signed, every 60 s; heard Travelers are tagged **Nearby vs Relay** and filtered to the 5-min reachable window. The **Commons shows live signs of life** ("N HERE"). Firmware unchanged — the repeater is the carried phone's `RelayClient`.
 
+- **Tooling & polish (2026-06-23).** A **two-board serial test harness**
+  (`tools/harness/`) drives both Heltec boards over USB at once and runs the real
+  `RelayClient` against the physical radios — presence/DM/Commons/dedupe E2E over
+  LoRa (firmware gained a magic-framed binary serial channel for it). **ZyPico
+  logo** added: LCD boot splash + OLED logo (USER button toggles to an info
+  screen showing devices in range); assets generated from `img/logo.png` by
+  `npm run gen:logo`. **README** with a quick-start guide.
+
 **Next:** **M5 — Traveler Pages + Guestbooks** (author/edit a small page; browse others'; sign a guestbook). The Dexie/IndexedDB migration stays a behind-the-seam swap for when message volume or Station vaults (M7) need it.
 
 **Design status:** the spec is build-ready. Identity/crypto, transport/mesh, companion model, sandbox, and the visual system are all decided. Four screens are designed and the surface grammar is proven. Remaining unknowns are best resolved during implementation, not further outlining.
