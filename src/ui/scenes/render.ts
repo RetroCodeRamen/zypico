@@ -22,6 +22,7 @@ import {
   type Wisp,
 } from "@core/companion/index.ts";
 import type { Discovery } from "@app/storage/discoveries.ts";
+import { LOGO, LOGO_H, LOGO_TRANSPARENT, LOGO_W } from "@ui/pixel/logoBitmap.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
 
 // PICO-8 indices used as semantic colors for the UI register.
@@ -89,6 +90,21 @@ export interface LoginView {
   field: "handle" | "password";
   busy: boolean;
   error?: string;
+}
+
+// The boot splash: the ZyPico wordmark on a clean ground, shown briefly before
+// the login gate. Auto-dismisses; any key skips it (handled by App).
+export function drawSplash(buf: PixelBuffer, frame: number): void {
+  buf.clear(C.textHi); // white ground (the logo's transparent pixels show through)
+  const ox = Math.floor((buf.width - LOGO_W) / 2);
+  const oy = Math.floor((buf.height - LOGO_H) / 2) - 4;
+  for (let y = 0; y < LOGO_H; y++) {
+    for (let x = 0; x < LOGO_W; x++) {
+      const v = LOGO[y * LOGO_W + x];
+      if (v !== LOGO_TRANSPARENT) buf.set(ox + x, oy + y, v);
+    }
+  }
+  if (Math.floor(frame / 4) % 2 === 0) drawTextCentered(buf, 70, "PRESS ANY KEY", C.dim);
 }
 
 export function drawLogin(buf: PixelBuffer, frame: number, v: LoginView): void {

@@ -4,7 +4,7 @@ import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
-import { careActionCount, drawLogin } from "@ui/scenes/render.ts";
+import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
 import type { EditView, MoodSummary } from "@ui/scenes/render.ts";
 import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
@@ -35,6 +35,14 @@ interface Editing extends EditView {
 export function App() {
   const [nav, navDispatch] = useReducer(navReduce, INITIAL_NAV);
   const [editing, setEditing] = useState<Editing | null>(null);
+
+  // Boot splash (the ZyPico wordmark) — shown briefly before the login gate,
+  // auto-dismissed; any button/key skips it.
+  const [splash, setSplash] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setSplash(false), 1600);
+    return () => clearTimeout(t);
+  }, []);
 
   // Identity gate — nothing is shown until the traveler logs in (outline §13.6).
   // On login we load per-identity state and bring the link up; that wiring lives
@@ -117,6 +125,7 @@ export function App() {
 
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
   const handleButton = (action: ButtonAction) => {
+    if (splash) { setSplash(false); sfx("select"); return; }
     if (!identity) {
       handleLoginButton(action);
       return;
@@ -246,6 +255,7 @@ export function App() {
   // reads stale state.
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
+    if (splash) { e.preventDefault(); setSplash(false); return; }
     // Arrow keys mirror the three buttons (the mapping you asked for).
     if (e.key === "ArrowLeft") return e.preventDefault(), handleButton("select");
     if (e.key === "ArrowDown") return e.preventDefault(), handleButton("accept");
@@ -310,7 +320,13 @@ export function App() {
       <div className="device" ref={deviceRef} style={{ transform: `scale(${scale})` }}>
         <div className="wordmark">ZyPico</div>
         <div className="shell">
-          {identity ? (
+          {splash ? (
+            <div className="lcd">
+              <div className="matrix">
+                <PixelScreen draw={drawSplash} fps={8} />
+              </div>
+            </div>
+          ) : identity ? (
             <Screen
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
@@ -353,7 +369,7 @@ export function App() {
         </div>
         <Buttons onAction={handleButton} />
         <Keyboard
-          active={!identity || editing !== null}
+          active={!splash && (!identity || editing !== null)}
           onType={identity ? editType : loginType}
           onBackspace={identity ? editBackspace : loginBackspace}
           onEnter={() => handleButton("accept")}

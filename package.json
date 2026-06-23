@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "gen:logo": "python3 tools/gen-logo.py"
   },
   "dependencies": {
     "@noble/ciphers": "^1.3.0",
