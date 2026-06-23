@@ -5,7 +5,7 @@ import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
 import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
-import type { EditView, MoodSummary } from "@ui/scenes/render.ts";
+import type { EditView, MoodSummary, PageView } from "@ui/scenes/render.ts";
 import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
 } from "@core/companion/index.ts";
@@ -18,6 +18,7 @@ import { useCompanion } from "@ui/hooks/useCompanion.ts";
 import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
+import { usePages } from "@ui/hooks/usePages.ts";
 
 // Hearts are earned through participation, never picked at will (DESIGN §2) —
 // real activity hooks grant them. CAN_RAISE now only gates a dev-only RESET in
@@ -65,10 +66,15 @@ export function App() {
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
 
+  // Your Traveler Page (local-first; per-identity) + the PAGES editor overlay.
+  const { myPage, load: loadPages, setTagline, setAbout } = usePages(identity?.fingerprint ?? null);
+  const [pageView, setPageView] = useState<PageView | null>(null);
+
   // Reached at login (after identity is derived, before the gate lifts).
   postAuthRef.current = (id: Identity) => {
     loadCompanion(id.fingerprint);
     social.load(id.fingerprint);
+    loadPages(id.fingerprint);
     void link.connectBoard(true); // always-on link to the board, no manual step
   };
 
@@ -180,6 +186,23 @@ export function App() {
       return;
     }
 
+    // PAGES → MY PAGE editor: SELECT moves between fields, ACCEPT edits one.
+    if (pageView) {
+      if (action === "select") {
+        setPageView({ panel: "mine", cursor: (pageView.cursor + 1) % 2 });
+      } else if (action === "accept") {
+        if (pageView.cursor === 0) {
+          setEditing({ label: "TAGLINE", value: myPage.tagline, onSubmit: setTagline });
+        } else {
+          setEditing({ label: "ABOUT", value: myPage.about, onSubmit: setAbout });
+        }
+      } else if (action === "cancel") {
+        setPageView(null);
+        navDispatch("cancel"); // leave the Pages place, back to home
+      }
+      return;
+    }
+
     // TRAVELERS place: buddy list (add nearby / open DM) and DM threads.
     if (inFriends) {
       if (friendsThread) {
@@ -224,6 +247,11 @@ export function App() {
       if (place.id === "commons") {
         sfx("accept");
         setEditing({ label: "COMMONS", value: "", onSubmit: (v) => social.sendRoom(v) });
+        return;
+      }
+      if (place.id === "pages" && item === "MY PAGE") {
+        sfx("accept");
+        setPageView({ panel: "mine", cursor: 0 });
         return;
       }
       if (place.id === "profile") {
@@ -309,6 +337,8 @@ export function App() {
         ? wispView.panel === "stats"
           ? "CANCEL back to care"
           : "SELECT move · ACCEPT do · CANCEL back"
+        : pageView
+          ? "SELECT move · ACCEPT edit · CANCEL back"
         : inFriends && friendsThread
           ? "ACCEPT write · CANCEL back"
           : inFriends
@@ -331,7 +361,7 @@ export function App() {
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
-                nearbyCount: reachable.length,
+                pageView, myPage, nearbyCount: reachable.length,
                 friends: inFriends
                   ? {
                       list: friendList,
@@ -354,8 +384,9 @@ export function App() {
               }}
               onIcon={(index) => {
                 sfx("accept");
-                // The Wisp icon opens its care surface; others clear it.
+                // The Wisp icon opens its care surface; others clear both overlays.
                 setWispView(PLACES[index].id === "wisp" ? { panel: "care", cursor: 0 } : null);
+                setPageView(null);
                 navDispatch({ type: "goto", index });
               }}
             />

@@ -22,6 +22,7 @@ import {
   type Wisp,
 } from "@core/companion/index.ts";
 import type { Discovery } from "@app/storage/discoveries.ts";
+import type { TravelerPage } from "@app/storage/page.ts";
 import { LOGO, LOGO_H, LOGO_TRANSPARENT, LOGO_W } from "@ui/pixel/logoBitmap.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
 
@@ -69,6 +70,13 @@ export interface EditView {
 export interface WispView {
   panel: "care" | "stats" | "journal";
   /** Highlighted action in the care panel (the action list, see CARE_ACTIONS). */
+  cursor: number;
+}
+
+/** The PAGES place overlay. `mine` = edit your Traveler Page (cursor: 0 tagline,
+ * 1 about). Viewing others' pages + guestbooks land in later M5 slices. */
+export interface PageView {
+  panel: "mine";
   cursor: number;
 }
 
@@ -142,6 +150,10 @@ export interface ScreenModel {
   relay: RelayView;
   wisp: Wisp;
   wispView: WispView | null;
+  /** PAGES overlay (edit your Traveler Page), when open. */
+  pageView: PageView | null;
+  /** Your Traveler Page (for the PAGES editor). */
+  myPage: TravelerPage;
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
   /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
@@ -495,6 +507,28 @@ export function drawWispJournal(buf: PixelBuffer, discoveries: Discovery[], now:
   drawTextCentered(buf, 73, "CANCEL BACK TO CARE", C.dim);
 }
 
+/** PAGES → MY PAGE: edit your small Traveler Page (tagline + about). */
+export function drawPageMine(buf: PixelBuffer, page: TravelerPage, view: PageView): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "MY PAGE", C.title);
+  drawText(buf, buf.width - measureText("MINE") - 3, 2, "MINE", C.tagLocal);
+  divider(buf, 9);
+
+  const tagHi = view.cursor === 0;
+  if (tagHi) drawText(buf, 1, 13, ">", C.cursor);
+  drawText(buf, 7, 13, "TAGLINE", tagHi ? C.textHi : C.text);
+  drawText(buf, 7, 21, page.tagline || "(none yet)", page.tagline ? C.ok : C.dim);
+
+  const aboutHi = view.cursor === 1;
+  if (aboutHi) drawText(buf, 1, 33, ">", C.cursor);
+  drawText(buf, 7, 33, "ABOUT", aboutHi ? C.textHi : C.text);
+  const lines = page.about ? wrapText(page.about, Math.floor((buf.width - 8) / CELL_W)) : ["(say hi to the Relay)"];
+  lines.slice(0, 4).forEach((ln, i) => drawText(buf, 7, 41 + i * 7, ln, page.about ? C.text : C.dim));
+
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT EDIT  CANCEL BACK", C.dim);
+}
+
 /** FRIENDS — buddy list (added first, then nearby with an ADD hint). */
 export function drawFriends(buf: PixelBuffer, v: FriendsView): void {
   if (v.thread) {
@@ -573,6 +607,10 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     if (model.wispView.panel === "stats") drawWispStats(buf, frame, model.wisp);
     else if (model.wispView.panel === "journal") drawWispJournal(buf, model.discoveries, Date.now());
     else drawWispCare(buf, frame, model.wisp, model.wispView, model.wispMood, model.canRaise);
+    return;
+  }
+  if (model.pageView) {
+    drawPageMine(buf, model.myPage, model.pageView);
     return;
   }
   const { nav } = model;
