@@ -8,12 +8,17 @@ import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
 import { CELL_W, drawText, drawTextCentered, measureText } from "@ui/pixel/font.ts";
 import { currentPlace, PLACES, type NavState, type PlaceDef } from "@ui/shell/nav.ts";
 import {
+  CARE_DEFS,
+  CARES,
   HEART_DEFS,
   HEARTS,
+  MOOD_MAX,
+  MOOD_STATE_DEFS,
   THRESHOLD,
   TIER_NAMES,
   wispAgeDays,
   wispForm,
+  type MoodState,
   type Wisp,
 } from "@core/companion/index.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
@@ -57,9 +62,21 @@ export interface EditView {
   value: string;
 }
 
-/** Detail view for the WISP Place. `cursor` 0–4 selects a heart to raise, 5 = name. */
+/** The WISP Place. `care` = care actions + reactions (front); `stats` = hearts. */
 export interface WispView {
+  panel: "care" | "stats";
+  /** Highlighted action in the care panel (the action list, see CARE_ACTIONS). */
   cursor: number;
+}
+
+/** Settled mood summary handed to the renderer (kept pure — App owns the clock). */
+export interface MoodSummary {
+  state: MoodState;
+  fed: number;
+  energy: number;
+  clean: number;
+  joy: number;
+  bond: number;
 }
 
 /** The login/onboarding gate, shown before anything else. */
@@ -107,6 +124,8 @@ export interface ScreenModel {
   relay: RelayView;
   wisp: Wisp;
   wispView: WispView | null;
+  /** The Wisp's settled mood (drives the home behavior + the care panel). */
+  wispMood: MoodSummary;
   /** TRAVELERS screen state (buddy list + open DM thread), when in that place. */
   friends?: FriendsView;
   /** COMMONS chatroom state, when in that place. */
@@ -290,14 +309,76 @@ export function drawEditor(buf: PixelBuffer, frame: number, edit: EditView): voi
   drawTextCentered(buf, 70, "ACCEPT OK  CANCEL BACK", C.dim);
 }
 
-/** The WISP Place: the creature, its form, age, and the five hearts. */
-export function drawWispDetail(
+// The care panel's action order — the WispView cursor indexes this. First the
+// six care actions (CARES), then RENAME, STATS, and a dev-only RESET. App's
+// handler maps the same indices, so keep the two in lockstep.
+export const CARE_ACTION_LABELS = [...CARES.map((c) => CARE_DEFS[c].label), "RENAME", "STATS"];
+export function careActionCount(canRaise: boolean): number {
+  return CARE_ACTION_LABELS.length + (canRaise ? 1 : 0);
+}
+
+/** A small filled need-meter bar (0..max) for the care panel. */
+function drawBar(buf: PixelBuffer, x: number, y: number, w: number, value: number, color: number): void {
+  buf.fillRect(x, y, w, 3, C.ground);
+  const fill = Math.round((Math.max(0, Math.min(MOOD_MAX, value)) / MOOD_MAX) * w);
+  if (fill > 0) buf.fillRect(x, y, fill, 3, color);
+}
+
+const METER_ROWS: { key: keyof MoodSummary; tag: string }[] = [
+  { key: "fed", tag: "FED" }, { key: "energy", tag: "ENE" },
+  { key: "clean", tag: "CLN" }, { key: "joy", tag: "JOY" },
+];
+
+/** The WISP care panel (front): the creature reacting, its mood, and the verbs. */
+export function drawWispCare(
   buf: PixelBuffer,
   frame: number,
   wisp: Wisp,
   view: WispView,
+  mood: MoodSummary,
   canRaise: boolean,
 ): void {
+  buf.clear(C.bg);
+  const state = MOOD_STATE_DEFS[mood.state];
+  drawText(buf, 3, 2, wisp.name ? wisp.name.toUpperCase() : "UNNAMED", C.title);
+  drawText(buf, buf.width - measureText(state.label) - 3, 2, state.label, state.color);
+  divider(buf, 9);
+
+  // The creature, tinted by mood; livelier when happy, still when low.
+  const form = wispForm(wisp);
+  const lively = mood.state === "joyful" || mood.state === "happy";
+  const bob = lively ? Math.round(Math.sin(frame * 0.12) * 2) : 0;
+  drawWisp(buf, 22, 24 + bob, frame, { ...form, color: state.color }, 0.6);
+  if (mood.state === "joyful" && frame % 30 < 14) {
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2 + frame * 0.2;
+      buf.set(22 + Math.round(Math.cos(a) * 13), 24 + Math.round(Math.sin(a) * 11), C.textHi);
+    }
+  }
+
+  // Need meters on the right.
+  METER_ROWS.forEach((m, i) => {
+    const y = 13 + i * 6;
+    drawText(buf, 44, y, m.tag, C.dim);
+    drawBar(buf, 64, y + 1, 56, mood[m.key] as number, state.color);
+  });
+  divider(buf, 39);
+
+  // Care verbs, two columns.
+  const labels = [...CARE_ACTION_LABELS, ...(canRaise ? ["RESET"] : [])];
+  labels.forEach((label, i) => {
+    const col = i % 2;
+    const x = col === 0 ? 4 : 66;
+    const y = 43 + Math.floor(i / 2) * 7;
+    const hi = i === view.cursor;
+    if (hi) drawText(buf, x, y, ">", C.cursor);
+    const isReset = label === "RESET";
+    drawText(buf, x + 6, y, label, hi ? (isReset ? C.warn : C.textHi) : isReset ? C.dim : C.text);
+  });
+}
+
+/** The WISP stats panel: the creature, its form, age, and the five hearts. */
+export function drawWispStats(buf: PixelBuffer, frame: number, wisp: Wisp): void {
   buf.clear(C.bg);
   const form = wispForm(wisp);
   drawText(buf, 3, 2, wisp.name ? wisp.name.toUpperCase() : "UNNAMED", C.title);
@@ -310,29 +391,14 @@ export function drawWispDetail(
   drawText(buf, 28, 22, `DAY ${wispAgeDays(wisp)}`, C.dim);
   divider(buf, 31);
 
-  // Five stat rows as Tamagotchi hearts (5 per stat, half/whole). In dev the
-  // cursor can highlight a heart to raise it (test only).
+  // Five Hearts (earned by participation — never by care).
   HEARTS.forEach((heart, i) => {
     const def = HEART_DEFS[heart];
-    const y = 34 + i * 6;
-    const hi = canRaise && view.cursor === i;
-    if (hi) drawText(buf, 1, y, ">", C.cursor);
+    const y = 35 + i * 6;
     drawText(buf, 7, y, def.tag, def.color);
     drawHeartMeter(buf, 14, y, wisp.hearts[heart], THRESHOLD.beacon, def.color);
   });
-
-  const nameIndex = canRaise ? HEARTS.length : 0;
-  const resetIndex = canRaise ? HEARTS.length + 1 : -1;
-  const ny = 65;
-  const nameHi = view.cursor === nameIndex;
-  if (nameHi) drawText(buf, 1, ny, ">", C.cursor);
-  drawText(buf, 7, ny, "NAME WISP", nameHi ? C.textHi : C.text);
-  if (canRaise) {
-    const ry = 72;
-    const resetHi = view.cursor === resetIndex;
-    if (resetHi) drawText(buf, 1, ry, ">", C.cursor);
-    drawText(buf, 7, ry, "RESET (DEV)", resetHi ? C.warn : C.dim);
-  }
+  drawTextCentered(buf, 73, "CANCEL BACK TO CARE", C.dim);
 }
 
 /** FRIENDS — buddy list (added first, then nearby with an ADD hint). */
@@ -404,7 +470,8 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     return;
   }
   if (model.wispView) {
-    drawWispDetail(buf, frame, model.wisp, model.wispView, model.canRaise);
+    if (model.wispView.panel === "stats") drawWispStats(buf, frame, model.wisp);
+    else drawWispCare(buf, frame, model.wisp, model.wispView, model.wispMood, model.canRaise);
     return;
   }
   const { nav } = model;

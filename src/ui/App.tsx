@@ -4,9 +4,9 @@ import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
-import { drawLogin } from "@ui/scenes/render.ts";
-import type { EditView } from "@ui/scenes/render.ts";
-import { applyActivity, createWisp, HEARTS, renameWisp, wispForm } from "@core/companion/index.ts";
+import { careActionCount, drawLogin } from "@ui/scenes/render.ts";
+import type { EditView, MoodSummary } from "@ui/scenes/render.ts";
+import { applyCare, CARES, createWisp, moodState, renameWisp, settleMood } from "@core/companion/index.ts";
 import type { Identity } from "@core/identity/index.ts";
 import { sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
@@ -16,12 +16,9 @@ import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
 
-// Points granted per local "raise" action. This is a TEST-ONLY affordance,
-// gated to dev builds (CAN_RAISE) — hearts are meant to be earned through
-// participation, never picked at will (outline §3.2/§14). Real features
-// (messaging→Signal, games→Arena, …) will call applyActivity the same way, and
-// this manual action goes away.
-const FEED_AMOUNT = 8;
+// Hearts are earned through participation, never picked at will (DESIGN §2) —
+// real activity hooks grant them. CAN_RAISE now only gates a dev-only RESET in
+// the Wisp care panel (handy for testing evolution without grinding).
 const CAN_RAISE = import.meta.env.DEV;
 
 interface Editing extends EditView {
@@ -117,31 +114,35 @@ export function App() {
       return; // SELECT is inert while editing
     }
 
-    // WISP Place: care/detail surface — (dev) raise hearts / name / reset / back.
+    // WISP Place. Stats panel is view-only (CANCEL returns to care). Care panel:
+    // the six care actions (move Mood, never Hearts), then RENAME, STATS, RESET.
     if (wispView) {
-      // Selectable actions: 5 hearts (dev only), then NAME, then RESET (dev only).
-      const actionCount = CAN_RAISE ? HEARTS.length + 2 : 1;
-      const nameIndex = CAN_RAISE ? HEARTS.length : 0;
-      const resetIndex = CAN_RAISE ? HEARTS.length + 1 : -1;
+      if (wispView.panel === "stats") {
+        if (action === "cancel") setWispView({ panel: "care", cursor: 0 });
+        return;
+      }
+      const count = careActionCount(CAN_RAISE);
       if (action === "select") {
-        setWispView({ cursor: (wispView.cursor + 1) % actionCount });
+        setWispView({ panel: "care", cursor: (wispView.cursor + 1) % count });
       } else if (action === "accept") {
-        if (wispView.cursor === nameIndex) {
+        const i = wispView.cursor;
+        if (i < CARES.length) {
+          setWisp((w) => ({ ...w, mood: applyCare(w.mood, CARES[i]) }));
+          sfx("feed"); // a soft, happy reaction
+        } else if (i === CARES.length) { // RENAME
           sfx("accept");
           setEditing({
             label: "NAME YOUR WISP",
             value: wisp.name,
             onSubmit: (v) => setWisp((w) => renameWisp(w, v.slice(0, 12))),
           });
-        } else if (wispView.cursor === resetIndex) {
+        } else if (i === CARES.length + 1) { // STATS
+          sfx("select");
+          setWispView({ panel: "stats", cursor: 0 });
+        } else if (CAN_RAISE) { // RESET (dev)
           sfx("cancel");
           setWisp(createWisp()); // TEST ONLY: start a fresh Flicker
-        } else if (CAN_RAISE) {
-          // TEST ONLY: raise the chosen heart. Real growth comes from activity.
-          const heart = HEARTS[wispView.cursor];
-          const next = applyActivity(wisp, heart, FEED_AMOUNT);
-          sfx(wispForm(next).id !== wispForm(wisp).id ? "evolve" : "feed");
-          setWisp(next);
+          setWispView({ panel: "care", cursor: 0 });
         }
       } else if (action === "cancel") {
         setWispView(null);
@@ -183,7 +184,7 @@ export function App() {
     if (action === "accept" && nav.level === "home" && nav.iconIndex !== null
         && PLACES[nav.iconIndex].id === "wisp") {
       sfx("accept");
-      setWispView({ cursor: 0 });
+      setWispView({ panel: "care", cursor: 0 });
       navDispatch("accept");
       return;
     }
@@ -256,6 +257,15 @@ export function App() {
     return () => window.removeEventListener("keydown", f);
   }, []);
 
+  // The Wisp's settled mood (App owns the clock; the renderer stays pure).
+  const now = Date.now();
+  const settledMood = settleMood(wisp.mood, now);
+  const wispMood: MoodSummary = {
+    state: moodState(wisp.mood, now),
+    fed: settledMood.fed, energy: settledMood.energy,
+    clean: settledMood.clean, joy: settledMood.joy, bond: settledMood.bond,
+  };
+
   const footer = !identity
     ? login.mode === "create"
       ? "TYPE · SELECT field · ACCEPT create"
@@ -263,7 +273,9 @@ export function App() {
     : editing
       ? "TYPE · ACCEPT ok · CANCEL back"
       : wispView
-        ? "SELECT move · ACCEPT raise · CANCEL back"
+        ? wispView.panel === "stats"
+          ? "CANCEL back to care"
+          : "SELECT move · ACCEPT do · CANCEL back"
         : inFriends && friendsThread
           ? "ACCEPT write · CANCEL back"
           : inFriends
@@ -279,7 +291,7 @@ export function App() {
             <Screen
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
-                nearbyCount: social.nearby.length,
+                wispMood, nearbyCount: social.nearby.length,
                 friends: inFriends
                   ? {
                       list: friendList,
@@ -299,7 +311,7 @@ export function App() {
               onIcon={(index) => {
                 sfx("accept");
                 // The Wisp icon opens its care surface; others clear it.
-                setWispView(PLACES[index].id === "wisp" ? { cursor: 0 } : null);
+                setWispView(PLACES[index].id === "wisp" ? { panel: "care", cursor: 0 } : null);
                 navDispatch({ type: "goto", index });
               }}
             />
