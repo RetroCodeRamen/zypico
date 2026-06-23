@@ -1,19 +1,22 @@
 import { useEffect, useRef, useState } from "react";
 import { open, seal, type Identity } from "@core/identity/index.ts";
 import {
-  compareHlc, decodeHlc, encodeHlc, HybridLogicalClock, SubType, type HlcTimestamp,
+  compareHlc, decodeHlc, encodeHlc, HybridLogicalClock, SubType,
 } from "@core/protocol/index.ts";
 import {
   decodeDM, decodePresence, decodeRoomMsg, encodeDM, encodePresence, encodeRoomMsg, MAIN_ROOM, type Presence,
 } from "@core/protocol/social.ts";
 import { type Buddy, loadBuddies, saveBuddies, upsertBuddy } from "@app/storage/buddies.ts";
+import {
+  type DmThreads, type RoomLine,
+  loadDmThreads, loadRoom, saveDmThreads, saveRoom,
+} from "@app/storage/messages.ts";
 import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import { sfx } from "@ui/sound.ts";
 import type { InboundDecoded } from "@app/RelayClient.ts";
 import type { Relay } from "@ui/hooks/useRelay.ts";
 
-export interface DmLine { out: boolean; text: string }
-export interface RoomLine { ts: HlcTimestamp; senderFp: string; handle: string; text: string; mine: boolean }
+const roomKey = (line: RoomLine) => `${line.senderFp}:${line.ts.wallMs}.${line.ts.counter}`;
 
 // The social layer: presence (who's around), buddies, encrypted DMs, and the
 // HLC-ordered main chatroom. Reads/sends through the Relay link; persists
@@ -22,7 +25,7 @@ export interface RoomLine { ts: HlcTimestamp; senderFp: string; handle: string; 
 export function useSocial(identity: Identity | null, link: Relay) {
   const [buddies, setBuddies] = useState<Buddy[]>([]);
   const [nearby, setNearby] = useState<Presence[]>([]);
-  const [dmThreads, setDmThreads] = useState<Record<string, DmLine[]>>({});
+  const [dmThreads, setDmThreads] = useState<DmThreads>({});
   const [roomMsgs, setRoomMsgs] = useState<RoomLine[]>([]);
   const hlcRef = useRef(new HybridLogicalClock());
   const seenRoomRef = useRef(new Set<string>()); // app-level dedupe of room messages
@@ -38,6 +41,12 @@ export function useSocial(identity: Identity | null, link: Relay) {
   useEffect(() => {
     if (identity) saveBuddies(identity.fingerprint, buddies);
   }, [buddies, identity]);
+  useEffect(() => {
+    if (identity) saveDmThreads(identity.fingerprint, dmThreads);
+  }, [dmThreads, identity]);
+  useEffect(() => {
+    if (identity) saveRoom(identity.fingerprint, roomMsgs);
+  }, [roomMsgs, identity]);
 
   const resolvePubkey = (fp: string): Uint8Array | undefined => {
     const b = buddiesRef.current.find((x) => x.fingerprint === fp);
@@ -47,7 +56,7 @@ export function useSocial(identity: Identity | null, link: Relay) {
 
   // Insert a room message (app-deduped, HLC-ordered).
   const ingestRoom = (line: RoomLine) => {
-    const key = `${line.senderFp}:${line.ts.wallMs}.${line.ts.counter}`;
+    const key = roomKey(line);
     if (seenRoomRef.current.has(key)) return;
     seenRoomRef.current.add(key);
     setRoomMsgs((prev) => [...prev, line].sort((a, b) => compareHlc(a.ts, b.ts)).slice(-60));
@@ -137,8 +146,17 @@ export function useSocial(identity: Identity | null, link: Relay) {
     }
   };
 
-  // Load the stored buddy list at login.
-  const load = (fingerprint: string) => setBuddies(loadBuddies(fingerprint));
+  // Restore the traveler's stored social state at login: buddies, DM threads,
+  // and the cached chatroom. Seed the room dedupe set from what we restore, and
+  // advance the clock past restored history so new sends sort after it.
+  const load = (fingerprint: string) => {
+    setBuddies(loadBuddies(fingerprint));
+    setDmThreads(loadDmThreads(fingerprint));
+    const room = loadRoom(fingerprint);
+    seenRoomRef.current = new Set(room.map(roomKey));
+    for (const line of room) hlcRef.current.recv(line.ts);
+    setRoomMsgs(room);
+  };
 
   return { buddies, nearby, dmThreads, roomMsgs, addBuddy, sendRoom, sendDM, load };
 }
