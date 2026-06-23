@@ -78,6 +78,7 @@ export function App() {
     loadCompanion(id.fingerprint);
     social.load(id.fingerprint);
     loadPages(id.fingerprint);
+    pageExchange.loadGuests(id.fingerprint);
     void link.connectBoard(true); // always-on link to the board, no manual step
   };
 
@@ -223,8 +224,16 @@ export function App() {
           setPageView(null);
           navDispatch("cancel");
         }
-      } else { // view
-        if (action === "cancel") setPageView({ panel: "browse", cursor: 0 });
+      } else if (pageView.panel === "guestbook") {
+        if (action === "cancel") { setPageView(null); navDispatch("cancel"); }
+      } else { // view someone's page
+        if (action === "accept" && pageView.fp) {
+          const who = (pageExchange.pages[pageView.fp]?.handle ?? "TRAVELER").toUpperCase();
+          const fp = pageView.fp;
+          setEditing({ label: `SIGN ${who}`.slice(0, 18), value: "", onSubmit: (v) => pageExchange.signGuestbook(fp, v) });
+        } else if (action === "cancel") {
+          setPageView({ panel: "browse", cursor: 0 });
+        }
       }
       return;
     }
@@ -283,6 +292,11 @@ export function App() {
       if (place.id === "pages" && item === "BROWSE") {
         sfx("accept");
         setPageView({ panel: "browse", cursor: 0 });
+        return;
+      }
+      if (place.id === "pages" && item === "GUESTBOOK") {
+        sfx("accept");
+        setPageView({ panel: "guestbook", cursor: 0 });
         return;
       }
       if (place.id === "profile") {
@@ -370,10 +384,12 @@ export function App() {
           : "SELECT move · ACCEPT do · CANCEL back"
         : pageView
           ? pageView.panel === "view"
-            ? "CANCEL back"
-            : pageView.panel === "browse"
-              ? "SELECT move · ACCEPT view · CANCEL back"
-              : "SELECT move · ACCEPT edit · CANCEL back"
+            ? "ACCEPT sign · CANCEL back"
+            : pageView.panel === "guestbook"
+              ? "CANCEL back"
+              : pageView.panel === "browse"
+                ? "SELECT move · ACCEPT view · CANCEL back"
+                : "SELECT move · ACCEPT edit · CANCEL back"
         : inFriends && friendsThread
           ? "ACCEPT write · CANCEL back"
           : inFriends
@@ -396,7 +412,7 @@ export function App() {
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
-                pageView, myPage, pageBrowse,
+                pageView, myPage, pageBrowse, myGuestbook: pageExchange.myGuestbook,
                 pageViewed: pageView?.panel === "view" && pageView.fp ? pageExchange.pages[pageView.fp] ?? null : null,
                 nearbyCount: reachable.length,
                 friends: inFriends

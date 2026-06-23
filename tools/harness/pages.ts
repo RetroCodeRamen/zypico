@@ -7,7 +7,9 @@
 import { RelayClient } from "@app/RelayClient.ts";
 import { deriveIdentity } from "@core/identity/index.ts";
 import {
-  decodePage, decodePageReq, encodeFrame, encodePage, encodePageReq, SubType, type PageMsg,
+  decodeGuestbook, decodePage, decodePageReq,
+  encodeFrame, encodeGuestbook, encodePage, encodePageReq,
+  SubType, type GuestbookMsg, type PageMsg,
 } from "@core/protocol/index.ts";
 import { SerialTransport } from "./SerialTransport.ts";
 import { check, delay, finish, guard, log, waitFor } from "./lib.ts";
@@ -16,8 +18,9 @@ const PORT_A = process.env.PORT_A ?? "/dev/ttyUSB0";
 const PORT_B = process.env.PORT_B ?? "/dev/ttyUSB1";
 
 async function main(): Promise<void> {
-  guard(45_000);
+  guard(60_000);
   const idA = await deriveIdentity("PageOwner", "pw-a");
+  const idB = await deriveIdentity("Visitor", "pw-b");
 
   const tA = new SerialTransport(PORT_A);
   const tB = new SerialTransport(PORT_B);
@@ -28,12 +31,17 @@ async function main(): Promise<void> {
   const txA = (s: SubType, p: Uint8Array) => tA.sendFrame(encodeFrame(s, p, { hopLimit: 1 }));
   const txB = (s: SubType, p: Uint8Array) => tB.sendFrame(encodeFrame(s, p, { hopLimit: 1 }));
 
-  // A serves its page whenever asked for it.
+  // A serves its page on request, and collects guestbook signatures left for it.
+  let signed: GuestbookMsg | null = null;
   a.onInbound((f) => {
-    if (f.subtype !== SubType.PAGE_REQ) return;
-    const r = decodePageReq(f.payload);
-    if (r?.ownerFp === idA.fingerprint) {
-      txA(SubType.PAGE, encodePage(idA, "wandering the mesh", "i collect signal hearts and good chats", Date.now()));
+    if (f.subtype === SubType.PAGE_REQ) {
+      const r = decodePageReq(f.payload);
+      if (r?.ownerFp === idA.fingerprint) {
+        txA(SubType.PAGE, encodePage(idA, "wandering the mesh", "i collect signal hearts and good chats", Date.now()));
+      }
+    } else if (f.subtype === SubType.GUESTBOOK) {
+      const g = decodeGuestbook(f.payload);
+      if (g?.ownerFp === idA.fingerprint) signed = g;
     }
   });
 
@@ -65,6 +73,20 @@ async function main(): Promise<void> {
     check("handle round-trips", p.handle === "PageOwner", p.handle);
     check("tagline round-trips", p.tagline === "wandering the mesh", p.tagline);
     check("about round-trips", p.about.startsWith("i collect signal hearts"), p.about);
+  }
+
+  // B signs A's guestbook; A must receive + verify it.
+  log("B → signing A's guestbook…");
+  for (let i = 0; i < 3 && signed === null; i++) {
+    txB(SubType.GUESTBOOK, encodeGuestbook(idA.fingerprint, idB, "great page, traveler!"));
+    await delay(2500);
+  }
+  await waitFor(() => signed !== null, 4000);
+  check("A received B's guestbook signature", signed !== null);
+  const g = signed as GuestbookMsg | null;
+  if (g) {
+    check("signed by B (verified)", g.signerFp === idB.fingerprint, g.signerFp);
+    check("guestbook text round-trips", g.text === "great page, traveler!", g.text);
   }
 
   await a.disconnect();

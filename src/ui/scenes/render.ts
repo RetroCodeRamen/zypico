@@ -23,6 +23,7 @@ import {
 } from "@core/companion/index.ts";
 import type { Discovery } from "@app/storage/discoveries.ts";
 import type { TravelerPage } from "@app/storage/page.ts";
+import type { GuestEntry } from "@app/storage/guestbook.ts";
 import type { PageMsg } from "@core/protocol/index.ts";
 import { LOGO, LOGO_H, LOGO_TRANSPARENT, LOGO_W } from "@ui/pixel/logoBitmap.ts";
 import { drawHeartMeter, drawWisp } from "./wisp.ts";
@@ -77,7 +78,7 @@ export interface WispView {
 /** The PAGES place overlay. `mine` = edit your Traveler Page (cursor: 0 tagline,
  * 1 about); `browse` = pick a reachable Traveler; `view` = read their page. */
 export interface PageView {
-  panel: "mine" | "browse" | "view";
+  panel: "mine" | "browse" | "view" | "guestbook";
   cursor: number;
   /** Whose page is open (panel "view"). */
   fp?: string;
@@ -161,6 +162,8 @@ export interface ScreenModel {
   pageBrowse: { handle: string; fingerprint: string }[];
   /** The page being viewed (PAGES → view), or null while it's still fetching. */
   pageViewed: PageMsg | null;
+  /** Guestbook entries left for you (PAGES → guestbook). */
+  myGuestbook: GuestEntry[];
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
   /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
@@ -575,6 +578,25 @@ export function drawPageView(buf: PixelBuffer, page: PageMsg | null): void {
   const lines = page.about ? wrapText(page.about, Math.floor((buf.width - 6) / CELL_W)) : ["(no about yet)"];
   lines.slice(0, 6).forEach((ln, i) => drawText(buf, 3, 28 + i * 7, ln, page.about ? C.text : C.dim));
   buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT SIGN  CANCEL BACK", C.dim);
+}
+
+/** PAGES → GUESTBOOK: short public notes visitors have left on your page. */
+export function drawPageGuestbook(buf: PixelBuffer, entries: GuestEntry[]): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "GUESTBOOK", C.title);
+  drawText(buf, buf.width - measureText("MINE") - 3, 2, "MINE", C.tagLocal);
+  divider(buf, 9);
+  if (entries.length === 0) {
+    drawTextCentered(buf, 30, "NO SIGNATURES YET", C.dim);
+    drawTextCentered(buf, 40, "SHARE YOUR PAGE!", C.dim);
+  } else {
+    const maxChars = Math.floor((buf.width - 4) / CELL_W);
+    [...entries].reverse().slice(0, 8).forEach((e, i) => {
+      drawText(buf, 2, 13 + i * 7, `${e.handle}: ${e.text}`.toUpperCase().slice(0, maxChars), i === 0 ? C.ok : C.text);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
   drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
 }
 
@@ -661,6 +683,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   if (model.pageView) {
     if (model.pageView.panel === "browse") drawPageBrowse(buf, model.pageBrowse, model.pageView.cursor);
     else if (model.pageView.panel === "view") drawPageView(buf, model.pageViewed);
+    else if (model.pageView.panel === "guestbook") drawPageGuestbook(buf, model.myGuestbook);
     else drawPageMine(buf, model.myPage, model.pageView);
     return;
   }
