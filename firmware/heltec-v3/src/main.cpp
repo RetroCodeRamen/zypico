@@ -76,11 +76,8 @@ static bool showInfo = false;
 #define PEER_WINDOW_MS 300000UL // a device is "in range" if heard in the last 5 min
 static uint32_t peerIds[MAX_PEERS];
 static uint32_t peerLastMs[MAX_PEERS];
+static int peerRssi[MAX_PEERS]; // last-heard signal strength per peer (for the OLED)
 static int peerCount = 0;
-
-// RSSI of the most recently heard packet (for the OLED, e.g. walk tests).
-static int lastRssi = 0;
-static uint32_t lastRssiMs = 0; // 0 = nothing heard yet
 
 struct TxMsg {
   uint8_t len;
@@ -91,27 +88,21 @@ static QueueHandle_t txQueue;
 static void drawSplashOled();
 static void drawInfo();
 
-// Record a directly-heard device (its MAC src), newest timestamp wins.
-static void notePeer(uint32_t src) {
+// Record a directly-heard device (its MAC src) + its RSSI, newest wins.
+static void notePeer(uint32_t src, int rssi) {
   uint32_t now = millis();
   for (int i = 0; i < peerCount; i++) {
-    if (peerIds[i] == src) { peerLastMs[i] = now; return; }
+    if (peerIds[i] == src) { peerLastMs[i] = now; peerRssi[i] = rssi; return; }
   }
   if (peerCount < MAX_PEERS) {
-    peerIds[peerCount] = src; peerLastMs[peerCount] = now; peerCount++;
+    peerIds[peerCount] = src; peerLastMs[peerCount] = now; peerRssi[peerCount] = rssi; peerCount++;
   } else {
     int oldest = 0;
     for (int i = 1; i < MAX_PEERS; i++) if (peerLastMs[i] < peerLastMs[oldest]) oldest = i;
-    peerIds[oldest] = src; peerLastMs[oldest] = now;
+    peerIds[oldest] = src; peerLastMs[oldest] = now; peerRssi[oldest] = rssi;
   }
 }
 
-static int peersInRange() {
-  uint32_t now = millis();
-  int n = 0;
-  for (int i = 0; i < peerCount; i++) if (now - peerLastMs[i] < PEER_WINDOW_MS) n++;
-  return n;
-}
 
 // Magic-framed binary on USB serial, for the test harness (see header comment).
 static const uint8_t SERIAL_MAGIC0 = 0xAA;
@@ -202,23 +193,43 @@ static void drawSplashOled() {
 
 // Info screen: no wordmark (the splash brands the device); status + how many
 // ZyPico devices are in radio range right now.
+// The strongest few in-range peers with their RSSI — the range-test view.
 static void drawInfo() {
   char line[32];
+  const int MAX_ROWS = 3;
   oled.clearBuffer();
   oled.setFont(u8g2_font_5x8_tr);
-  oled.drawStr(2, 9, "AP:");
-  oled.drawStr(22, 9, apSsid);
+  oled.drawStr(2, 8, "AP:");
+  oled.drawStr(20, 8, apSsid);
   snprintf(line, sizeof(line), "node !%x  915MHz", nodeId);
-  oled.drawStr(2, 19, line);
-  oled.drawLine(0, 24, 127, 24);
-  oled.setFont(u8g2_font_6x12_tr);
-  snprintf(line, sizeof(line), "In range: %d", peersInRange());
-  oled.drawStr(2, 38, line);
-  if (lastRssiMs == 0) {
-    oled.drawStr(2, 54, "RSSI: --");
+  oled.drawStr(2, 17, line);
+  oled.drawLine(0, 21, 127, 21);
+
+  // Gather in-range peers, then sort indices by RSSI (strongest first).
+  uint32_t now = millis();
+  int idx[MAX_PEERS], n = 0;
+  for (int i = 0; i < peerCount; i++) if (now - peerLastMs[i] < PEER_WINDOW_MS) idx[n++] = i;
+  for (int i = 0; i < n; i++) {
+    int best = i;
+    for (int j = i + 1; j < n; j++) if (peerRssi[idx[j]] > peerRssi[idx[best]]) best = j;
+    int t = idx[i]; idx[i] = idx[best]; idx[best] = t;
+  }
+
+  snprintf(line, sizeof(line), "In range: %d", n);
+  oled.drawStr(2, 31, line);
+  if (n > MAX_ROWS) {
+    snprintf(line, sizeof(line), "+%d", n - MAX_ROWS);
+    oled.drawStr(108, 31, line); // "+N" more than we can list
+  }
+
+  if (n == 0) {
+    oled.drawStr(2, 44, "(nobody heard yet)");
   } else {
-    snprintf(line, sizeof(line), "RSSI %d dBm %lus", lastRssi, (unsigned long)((millis() - lastRssiMs) / 1000));
-    oled.drawStr(2, 54, line);
+    int rows = n < MAX_ROWS ? n : MAX_ROWS;
+    for (int i = 0; i < rows; i++) {
+      snprintf(line, sizeof(line), "!%x  %d dBm", peerIds[idx[i]], peerRssi[idx[i]]);
+      oled.drawStr(2, 41 + i * 8, line);
+    }
   }
   oled.sendBuffer();
 }
@@ -250,12 +261,10 @@ void loop() {
         // Note: payload is BINARY (a RelayProtocol frame) — never print it as
         // text, or its bytes can mimic the 0xAA55 serial magic and desync a host.
         Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f\n", src, seq, len, (double)rssi);
-        if (src != nodeId) {        // ignore our own echo
-          notePeer(src);            // a ZyPico device heard directly = in range
-          lastRssi = (int)rssi;     // signal strength of the last heard packet
-          lastRssiMs = millis();
-          ws.binaryAll(buf, len);   // forward [srcId][seq][payload] to the browser
-          serialEmitFrame(buf, len); // …and to the serial test harness
+        if (src != nodeId) {            // ignore our own echo
+          notePeer(src, (int)rssi);     // a ZyPico device heard directly = in range
+          ws.binaryAll(buf, len);       // forward [srcId][seq][payload] to the browser
+          serialEmitFrame(buf, len);    // …and to the serial test harness
         }
       }
     }
