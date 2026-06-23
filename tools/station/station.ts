@@ -10,7 +10,7 @@
 import { RelayClient } from "@app/RelayClient.ts";
 import { deriveIdentity } from "@core/identity/index.ts";
 import {
-  decodeMailAck, decodePageReq, decodeVaultReq, encodeStationBeacon,
+  decodeCartReq, decodeMailAck, decodePageReq, decodeVaultReq, encodeStationBeacon,
   SERVICE, serviceTags, SubType, subTypeName,
 } from "@core/protocol/index.ts";
 import { decodeCommonsReq, decodePresence } from "@core/protocol/social.ts";
@@ -19,6 +19,7 @@ import { Mailbox } from "./mailbox.ts";
 import { PageStore } from "./pagestore.ts";
 import { CommonsLog } from "./commons.ts";
 import { VaultStore } from "./vaultstore.ts";
+import { CartStore } from "./cartstore.ts";
 
 const PORT = process.env.ZYPICO_STATION_PORT ?? "/dev/ttyUSB0";
 const NAME = process.env.ZYPICO_STATION_NAME ?? "HarborLight";
@@ -47,6 +48,7 @@ async function main(): Promise<void> {
   const pages = new PageStore(`${base}.pages.json`);
   const commons = new CommonsLog(50, `${base}.commons.json`);
   const vaults = new VaultStore(`${base}.vaults.json`);
+  const carts = new CartStore(`${base}.carts.json`);
 
   client.onInbound((f) => {
     if (f.subtype === SubType.MAIL) {
@@ -82,6 +84,12 @@ async function main(): Promise<void> {
       const r = decodeVaultReq(f.payload);
       const held = r && vaults.get(r.ownerFp);
       if (held) { client.send(SubType.VAULT, held); log(`served vault for ${r!.ownerFp}`); }
+    } else if (f.subtype === SubType.CART) {
+      if (carts.put(f.payload)) log(`hosting cart (now ${carts.count})`);
+    } else if (f.subtype === SubType.CART_REQ) {
+      const r = decodeCartReq(f.payload);
+      const held = r && carts.get(r.authorFp, r.name);
+      if (held) { client.send(SubType.CART, held); log(`served cart ${r!.name}`); }
     } else {
       log(`rx ${subTypeName(f.subtype)} (${f.payload.length}B, ${f.hops} hops)`);
     }

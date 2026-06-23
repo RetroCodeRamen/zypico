@@ -5,7 +5,7 @@ import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
 import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
-import type { EditView, MoodSummary, PageView, PostView, VaultView } from "@ui/scenes/render.ts";
+import type { EditView, ExchangeView, MoodSummary, PageView, PostView, VaultView } from "@ui/scenes/render.ts";
 import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
 } from "@core/companion/index.ts";
@@ -28,6 +28,7 @@ import { usePages } from "@ui/hooks/usePages.ts";
 import { usePageExchange } from "@ui/hooks/usePageExchange.ts";
 import { usePostOffice } from "@ui/hooks/usePostOffice.ts";
 import { useVault } from "@ui/hooks/useVault.ts";
+import { useCartExchange } from "@ui/hooks/useCartExchange.ts";
 
 // Hearts are earned through participation, never picked at will (DESIGN §2) —
 // real activity hooks grant them. CAN_RAISE now only gates a dev-only RESET in
@@ -88,11 +89,15 @@ export function App() {
   const postOffice = usePostOffice(identity, link, social.resolvePubkey, reachableFps);
   const [postView, setPostView] = useState<PostView | null>(null);
 
+  // The Exchange: Carts you hold (yours + received over the mesh) — run + share.
+  const cartExchange = useCartExchange(identity, link);
+  const [exchangeView, setExchangeView] = useState<ExchangeView | null>(null);
+
   // Account Vault: encrypted backup/restore at a Station. Restore re-loads every
   // local hook from the freshly-restored storage.
   const reloadLocal = (fp: string) => {
     loadCompanion(fp); social.load(fp); loadPages(fp);
-    pageExchange.loadGuests(fp); postOffice.load(fp);
+    pageExchange.loadGuests(fp); postOffice.load(fp); cartExchange.load(fp);
   };
   const vault = useVault(identity, link, reloadLocal);
   const [vaultView, setVaultView] = useState<VaultView | null>(null);
@@ -101,13 +106,11 @@ export function App() {
   const [cart, setCart] = useState<{ runner: CartRunner | null; name: string } | null>(null);
   const cartPressRef = useRef({ select: 0, accept: 0 }); // last tap times → momentary input
 
-  const launchCart = (name: string) => {
-    const sample = SAMPLE_CARTS.find((c) => c.name === name);
-    if (!sample) return;
+  const launchCart = (name: string, code: string) => {
     sfx("accept");
     cartPressRef.current = { select: 0, accept: 0 };
     setCart({ runner: null, name });
-    void CartRunner.load(sample.code, luaWasmUrl).then((r) => {
+    void CartRunner.load(code, luaWasmUrl).then((r) => {
       setCart((cur) => (cur && cur.name === name && cur.runner === null ? { runner: r, name } : (r.dispose(), cur)));
     });
   };
@@ -310,6 +313,15 @@ export function App() {
       return;
     }
 
+    // THE EXCHANGE overlay: pick a Cart and run it.
+    if (exchangeView) {
+      const list = cartExchange.carts;
+      if (action === "select") setExchangeView({ cursor: list.length ? (exchangeView.cursor + 1) % list.length : 0 });
+      else if (action === "accept") { const c = list[exchangeView.cursor]; if (c) launchCart(c.name, c.code); }
+      else if (action === "cancel") { setExchangeView(null); navDispatch("cancel"); }
+      return;
+    }
+
     // THE POST overlay: read mail, pick a recipient + compose, browse the outbox.
     if (postView) {
       if (postView.panel === "inbox") {
@@ -420,7 +432,17 @@ export function App() {
         else if (item === "OUTBOX") setPostView({ panel: "outbox", cursor: 0 });
         return;
       }
-      if (place.id === "arcade") { launchCart(item); return; }
+      if (place.id === "arcade") {
+        const s = SAMPLE_CARTS.find((c) => c.name === item);
+        if (s) launchCart(s.name, s.code);
+        return;
+      }
+      if (place.id === "exchange" && item === "CARTS") {
+        sfx("accept");
+        cartExchange.publish(); // share our Carts while we're here
+        setExchangeView({ cursor: 0 });
+        return;
+      }
       if (place.id === "profile") {
         if (item === "RELAY") {
           // Ambient link control: report status (select) + re-link / drop.
@@ -521,6 +543,8 @@ export function App() {
                 : "SELECT move · ACCEPT edit · CANCEL back"
         : vaultView
           ? "SELECT move · ACCEPT do · CANCEL back"
+        : exchangeView
+          ? "SELECT move · ACCEPT run · CANCEL back"
         : postView
           ? postView.panel === "read" || postView.panel === "outbox"
             ? "CANCEL back"
@@ -564,6 +588,7 @@ export function App() {
                 postView, inbox: postOffice.inbox, outbox: postOffice.outbox, mailPick,
                 mailRead: postView?.panel === "read" && postView.id != null ? postOffice.inbox.find((m) => m.id === postView.id) ?? null : null,
                 vaultView, vaultStatus: vault.status,
+                exchangeView, cartList: cartExchange.carts.map((c) => ({ name: c.name, author: c.author })),
                 nearbyCount: reachable.length,
                 friends: inFriends
                   ? {
@@ -598,6 +623,7 @@ export function App() {
                 setPageView(null);
                 setPostView(null);
                 setVaultView(null);
+                setExchangeView(null);
                 navDispatch({ type: "goto", index });
               }}
             />

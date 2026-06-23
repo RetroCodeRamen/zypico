@@ -25,6 +25,9 @@ export {
   decodeVault, decodeVaultReq, encodeVault, encodeVaultReq, type VaultBlobMsg,
 } from "./vault.ts";
 export {
+  decodeCart, decodeCartReq, encodeCart, encodeCartReq, type CartMsg,
+} from "./cart.ts";
+export {
   decodeGuestbook,
   decodePage,
   decodePageReq,

@@ -33,8 +33,9 @@ export enum SubType {
 
   // creation / large content
   CONTENT_PUB = 0x50,
-  CART = 0x51,
+  CART = 0x51,      // a signed Cart (author + name + Lua code)
   WISP_GIFT = 0x52,
+  CART_REQ = 0x53,  // ask for a specific Cart (author + name)
 
   // large-transfer plumbing
   MANIFEST = 0x60,

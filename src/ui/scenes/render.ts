@@ -90,6 +90,11 @@ export interface VaultView {
   cursor: number;
 }
 
+/** THE EXCHANGE overlay — a list of Carts to run (cursor selects one). */
+export interface ExchangeView {
+  cursor: number;
+}
+
 /** The POST place overlay: read mail, pick a recipient to compose, or browse the
  * outbox. `id` selects the open inbox mail (panel "read"). */
 export interface PostView {
@@ -189,6 +194,9 @@ export interface ScreenModel {
   /** PROFILE → VAULT overlay + its status, when open. */
   vaultView: VaultView | null;
   vaultStatus: "idle" | "backed-up" | "requesting" | "restored";
+  /** THE EXCHANGE overlay + the Carts you can run, when open. */
+  exchangeView: ExchangeView | null;
+  cartList: { name: string; author: string }[];
   /** The Wisp's settled mood (drives the home behavior + the care panel). */
   wispMood: MoodSummary;
   /** The Wisp's discoveries, oldest→newest (the JOURNAL panel). */
@@ -643,6 +651,27 @@ export function drawPageGuestbook(buf: PixelBuffer, entries: GuestEntry[]): void
   drawTextCentered(buf, 73, "CANCEL BACK", C.dim);
 }
 
+/** THE EXCHANGE: Carts you hold (yours + received), runnable. */
+export function drawExchange(buf: PixelBuffer, list: { name: string; author: string }[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "THE EXCHANGE", C.title);
+  divider(buf, 9);
+  if (list.length === 0) {
+    drawTextCentered(buf, 34, "NO CARTS YET", C.dim);
+  } else {
+    list.slice(0, 8).forEach((it, i) => {
+      const y = 13 + i * 7;
+      const hi = i === cursor;
+      if (hi) drawText(buf, 1, y, ">", C.cursor);
+      drawText(buf, 7, y, it.name.toUpperCase().slice(0, 12), hi ? C.textHi : C.text);
+      const by = it.author.toUpperCase().slice(0, 8);
+      drawText(buf, buf.width - measureText(by) - 3, y, by, C.dim);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT RUN  CANCEL BACK", C.dim);
+}
+
 /** PROFILE → VAULT: encrypted backup/restore to a Station. */
 export function drawVault(buf: PixelBuffer, view: VaultView, status: ScreenModel["vaultStatus"]): void {
   buf.clear(C.bg);
@@ -872,6 +901,10 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   if (model.vaultView) {
     drawVault(buf, model.vaultView, model.vaultStatus);
+    return;
+  }
+  if (model.exchangeView) {
+    drawExchange(buf, model.cartList, model.exchangeView.cursor);
     return;
   }
   const { nav } = model;
