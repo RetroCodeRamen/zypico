@@ -1120,25 +1120,44 @@ export function drawWorkshopMenu(buf: PixelBuffer, cursor: number): void {
   drawTextCentered(buf, 74, "ACCEPT DO  CANCEL BACK", C.dim);
 }
 
-/** WORKSHOP API cheat-sheet (the sandbox functions you can call). */
-export function drawWorkshopHelp(buf: PixelBuffer): void {
-  buf.clear(C.bg);
-  drawText(buf, 3, 1, "API REFERENCE", C.title);
-  divider(buf, 8);
-  const lines2 = [
+// WORKSHOP API cheat-sheet — paged (SELECT flips). C = color 0-15.
+const HELP_PAGES: string[][] = [
+  [
+    "DRAW  (C = COLOR 0-15)",
     "CLS(C)  PSET(X,Y,C)",
+    "PGET(X,Y)",
+    "LINE(X0,Y0,X1,Y1,C)",
+    "RECT(X,Y,W,H,C)",
     "RECTFILL(X,Y,W,H,C)",
+    "CIRC(X,Y,R,C)",
     "CIRCFILL(X,Y,R,C)",
     "PRINT(S,X,Y,C)",
-    "BTN(B) 0=SEL 1=ACC 2=CNL",
+    "SPR(X,Y,ROWS,SCALE)",
+  ],
+  [
+    "INPUT  SOUND  LUA",
+    "BTN(B)  BTNP(B)",
+    " 0=SEL 1=ACC 2=CNL",
+    "BEEP(FREQ,DUR,WAVE)",
     "FLR(N)  RND(N)",
     "W=128 H=80  FRAME",
-    "CALLBACKS: _INIT",
-    " _UPDATE  _DRAW",
-  ];
-  lines2.forEach((ln, i) => drawText(buf, 2, 11 + i * 6, ln, i >= 7 ? C.ok : C.text));
+    "CALLBACKS:",
+    " _INIT _UPDATE _DRAW",
+    "SPR ROWS={\"08\",\"80\"}",
+    " HEX=COLOR . =CLEAR",
+  ],
+];
+
+/** WORKSHOP API cheat-sheet (the sandbox functions you can call). */
+export function drawWorkshopHelp(buf: PixelBuffer, page: number): void {
+  buf.clear(C.bg);
+  const p = ((page % HELP_PAGES.length) + HELP_PAGES.length) % HELP_PAGES.length;
+  drawText(buf, 3, 1, "API REFERENCE", C.title);
+  drawText(buf, buf.width - measureText(`${p + 1}/${HELP_PAGES.length}`) - 3, 1, `${p + 1}/${HELP_PAGES.length}`, C.dim);
+  divider(buf, 8);
+  HELP_PAGES[p].forEach((ln, i) => drawText(buf, 2, 11 + i * 6, ln, i === 0 ? C.ok : C.text));
   buf.fillRect(0, 73, buf.width, 7, C.ground);
-  drawTextCentered(buf, 74, "CANCEL BACK", C.dim);
+  drawTextCentered(buf, 74, "SELECT PAGE  CANCEL BACK", C.dim);
 }
 
 /** A full-screen Cart error (compile failure in the Workshop preview). */
@@ -1167,7 +1186,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     if (w.mode === "list") drawWorkshopList(buf, model.myCartNames ?? [], w.cursor);
     else if (w.mode === "edit") drawWorkshopEditor(buf, frame, w.doc);
     else if (w.mode === "menu") drawWorkshopMenu(buf, w.cursor);
-    else drawWorkshopHelp(buf);
+    else drawWorkshopHelp(buf, w.page);
     return;
   }
   if (model.wispView) {

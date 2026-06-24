@@ -44,6 +44,18 @@ function beep(c: AudioContext, freq: number, at: number, dur: number, wave: Wave
   osc.stop(t0 + dur + 0.02);
 }
 
+// A Cart's `beep(freq, dur, wave)` — one tone, clamped for safety, mute-aware.
+// Deliberately minimal (beeps + boops); richer cart audio is a later design.
+export function cartBeep(freq: number, durSec: number, wave?: string): void {
+  if (muted) return;
+  const c = audio();
+  if (!c) return;
+  const f = Math.max(20, Math.min(8000, Number(freq) || 440));
+  const d = Math.max(0.02, Math.min(2, Number(durSec) || 0.1));
+  const w: Wave = wave === "sine" || wave === "triangle" || wave === "sawtooth" ? wave : "square";
+  beep(c, f, 0, d, w, 0.05);
+}
+
 export type Sfx =
   | "select" | "accept" | "cancel" | "feed" | "evolve"
   | "type" | "error" | "connect";

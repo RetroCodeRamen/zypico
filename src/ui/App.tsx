@@ -16,7 +16,7 @@ import {
 import { PLACE_HOME } from "@core/protocol/social.ts";
 import { SERVICE } from "@core/protocol/index.ts";
 import type { Identity } from "@core/identity/index.ts";
-import { sfx } from "@ui/sound.ts";
+import { cartBeep, sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
 import { useMuted } from "@ui/hooks/useMuted.ts";
 import { useKeyboardEnabled } from "@ui/hooks/useKeyboardEnabled.ts";
@@ -135,7 +135,7 @@ export function App() {
     sfx("accept");
     cartPressRef.current = { select: 0, accept: 0 };
     setCart({ runner: null, name, error: null, preview });
-    void CartRunner.load(code, luaWasmUrl).then((r) => {
+    void CartRunner.load(code, luaWasmUrl, { beep: cartBeep }).then((r) => {
       setCart((cur) => (cur && cur.name === name && cur.runner === null && !cur.error ? { runner: r, name, error: null, preview } : (r.dispose(), cur)));
     }).catch((e) => {
       setCart((cur) => (cur && cur.name === name ? { runner: null, name, error: cleanLuaError(e), preview } : cur));
@@ -324,7 +324,7 @@ export function App() {
             const name = cleanName(doc.name);
             cartExchange.saveCart(name, doc.code); sfx("accept");
             setWorkshop({ mode: "edit", doc: { ...doc, name, dirty: false, origName: name } });
-          } else if (cmd === "API HELP") setWorkshop({ mode: "help", doc });
+          } else if (cmd === "API HELP") setWorkshop({ mode: "help", doc, page: 0 });
           else if (cmd === "RENAME") {
             setEditing({ label: "CART NAME", value: doc.name, onSubmit: (v) => setWorkshop({ mode: "edit", doc: { ...doc, name: cleanName(v), dirty: true } }) });
           } else if (cmd === "DELETE") {
@@ -339,7 +339,8 @@ export function App() {
         return;
       }
       if (workshop.mode === "help") {
-        if (action === "cancel") setWorkshop({ mode: "edit", doc: workshop.doc });
+        if (action === "select") setWorkshop({ mode: "help", doc: workshop.doc, page: workshop.page + 1 });
+        else if (action === "cancel") setWorkshop({ mode: "edit", doc: workshop.doc });
         return;
       }
     }

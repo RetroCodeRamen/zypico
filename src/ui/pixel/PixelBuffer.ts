@@ -60,6 +60,49 @@ export class PixelBuffer {
     }
   }
 
+  /** A line from (x0,y0) to (x1,y1) (Bresenham), clipped per-pixel. */
+  line(x0: number, y0: number, x1: number, y1: number, color: number): void {
+    x0 |= 0; y0 |= 0; x1 |= 0; y1 |= 0;
+    const dx = Math.abs(x1 - x0);
+    const dy = -Math.abs(y1 - y0);
+    const sx = x0 < x1 ? 1 : -1;
+    const sy = y0 < y1 ? 1 : -1;
+    let err = dx + dy;
+    for (;;) {
+      this.set(x0, y0, color);
+      if (x0 === x1 && y0 === y1) break;
+      const e2 = 2 * err;
+      if (e2 >= dy) { err += dy; x0 += sx; }
+      if (e2 <= dx) { err += dx; y0 += sy; }
+    }
+  }
+
+  /** A rectangle outline (1px), clipped to the buffer. */
+  rect(x: number, y: number, w: number, h: number, color: number): void {
+    if (w <= 0 || h <= 0) return;
+    this.fillRect(x, y, w, 1, color);
+    this.fillRect(x, y + h - 1, w, 1, color);
+    this.fillRect(x, y, 1, h, color);
+    this.fillRect(x + w - 1, y, 1, h, color);
+  }
+
+  /** A circle outline (midpoint), clipped per-pixel. */
+  circle(cx: number, cy: number, r: number, color: number): void {
+    cx |= 0; cy |= 0; r |= 0;
+    if (r < 0) return;
+    let x = r;
+    let y = 0;
+    let err = 1 - r;
+    while (x >= y) {
+      this.set(cx + x, cy + y, color); this.set(cx + y, cy + x, color);
+      this.set(cx - y, cy + x, color); this.set(cx - x, cy + y, color);
+      this.set(cx - x, cy - y, color); this.set(cx - y, cy - x, color);
+      this.set(cx + y, cy - x, color); this.set(cx + x, cy - y, color);
+      y++;
+      if (err < 0) { err += 2 * y + 1; } else { x--; err += 2 * (y - x) + 1; }
+    }
+  }
+
   /** Filled disc centred at (cx, cy) with radius r. */
   fillCircle(cx: number, cy: number, r: number, color: number): void {
     const r2 = r * r;

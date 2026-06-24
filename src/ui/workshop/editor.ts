@@ -92,7 +92,7 @@ export type WorkshopView =
   | { mode: "list"; cursor: number }
   | { mode: "edit"; doc: CartDoc }
   | { mode: "menu"; cursor: number; doc: CartDoc }
-  | { mode: "help"; doc: CartDoc };
+  | { mode: "help"; doc: CartDoc; page: number };
 
 export const WORKSHOP_MENU = ["RUN", "SAVE", "API HELP", "RENAME", "DELETE", "SHARE", "EXIT"] as const;
 

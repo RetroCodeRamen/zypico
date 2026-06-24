@@ -1,12 +1,38 @@
-// Built-in Arcade Carts — small Lua programs that double as the Arcade's games
-// and as examples of the sandbox API (cls/pset/rectfill/circfill/print/btn,
-// frame, W/H, flr, rnd) and the _init/_update/_draw lifecycle. btn(0)=SELECT,
-// btn(1)=ACCEPT, btn(2)=CANCEL — and btn() stays true for ~160ms per tap, so
-// games that want a single step per press do their own rising-edge detection.
+// Built-in Carts — small Lua programs that double as the Arcade's games and as
+// examples of the sandbox API. Drawing: cls/pset/pget/line/rect/rectfill/circ/
+// circfill/print/spr. Input: btn(b) (held ~160ms) + btnp(b) (rising edge);
+// 0=SELECT 1=ACCEPT 2=CANCEL. Sound: beep(freq,dur,wave). Plus W/H/frame, flr,
+// rnd, and the Lua math/string/table libs. Lifecycle: _init/_update/_draw.
 
 export interface SampleCart { name: string; code: string }
 
 export const SAMPLE_CARTS: SampleCart[] = [
+  {
+    // A tour of the graphics + input + sound API (study it in the Workshop).
+    name: "DEMO",
+    code: `
+-- API DEMO: shapes, a sprite, btnp + beep
+hero = {
+  ".88.",
+  "8888",
+  "8.8.",
+}
+function _init() x = 56 end
+function _update()
+  if btnp(0) then x = x - 8; beep(440, 0.05) end
+  if btnp(1) then x = x + 8; beep(660, 0.05) end
+end
+function _draw()
+  cls(1)
+  print("BTNP MOVES + BEEPS", 2, 2, 7)
+  line(0, 22, W, 22, 5)
+  rect(8, 28, 40, 28, 12)
+  circ(96, 44, 14, 11)
+  circfill(96, 44, 6, 10)
+  spr(x, 60, hero, 3)
+end
+`,
+  },
   {
     // Mini Breakout: paddle (SELECT=left, ACCEPT=right), clear the brick wall.
     // 3 lives, win when the wall is gone; ACCEPT restarts on win/lose.
