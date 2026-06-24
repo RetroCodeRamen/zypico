@@ -218,6 +218,8 @@ export interface ScreenModel {
   carouselSlideAt?: number;
   /** Who you are, for the PROFILE place (handle + short fingerprint). */
   identityLabel?: { handle: string; fpShort: string };
+  /** Whether the on-screen keyboard is shown (SETTINGS → KEYBOARD). */
+  keyboardEnabled?: boolean;
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -454,6 +456,7 @@ export function drawSettings(
   state: NavState,
   relay: RelayView,
   muted: boolean,
+  keyboardEnabled: boolean,
 ): void {
   buf.clear(C.bg);
   drawText(buf, 3, 2, place.label, C.title);
@@ -467,6 +470,9 @@ export function drawSettings(
   if (item === "SOUND") {
     drawTextCentered(buf, 49, muted ? "SOUND: OFF" : "SOUND: ON", muted ? C.dim : C.ok);
     drawTextCentered(buf, 57, "ACCEPT TO TOGGLE", C.dim);
+  } else if (item === "KEYBOARD") {
+    drawTextCentered(buf, 49, keyboardEnabled ? "KEYBOARD: ON" : "KEYBOARD: OFF", keyboardEnabled ? C.ok : C.dim);
+    drawTextCentered(buf, 57, keyboardEnabled ? "ACCEPT: HIDE FOR BIG SCREEN" : "ACCEPT TO SHOW", C.dim);
   } else if (item === "RELAY") {
     drawTextCentered(buf, 49, relay.statusLabel, relay.online ? C.ok : relay.detail ? C.warn : C.dim);
     if (relay.online) {
@@ -1108,6 +1114,6 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   if (place.id === "arcade") drawCarousel(buf, "ARCADE", "", ARCADE_CARDS, nav.itemIndex, model.carouselSlideAt ?? 0);
   else if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
-  else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted);
+  else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted, model.keyboardEnabled ?? true);
   else drawPlace(buf, place, nav);
 }

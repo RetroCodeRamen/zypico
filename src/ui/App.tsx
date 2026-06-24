@@ -15,6 +15,7 @@ import type { Identity } from "@core/identity/index.ts";
 import { sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
 import { useMuted } from "@ui/hooks/useMuted.ts";
+import { useKeyboardEnabled } from "@ui/hooks/useKeyboardEnabled.ts";
 import { useCompanion } from "@ui/hooks/useCompanion.ts";
 import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
@@ -156,6 +157,10 @@ export function App() {
 
   // Sound on/off (persisted), kept in sync with the sound module.
   const [muted, setMutedState] = useMuted();
+
+  // On-screen keyboard on/off (persisted). Off hides it so the screen + buttons
+  // fill the viewport on small handhelds (typing then uses a hardware keyboard).
+  const [keyboardEnabled, setKeyboardEnabled] = useKeyboardEnabled();
 
   // Scale-to-fit: laid out at true design size, scaled by one uniform factor.
   const { stageRef, deviceRef, scale } = useViewportScale();
@@ -500,6 +505,13 @@ export function App() {
           navDispatch("accept"); // select so the toggle state shows
           return;
         }
+        if (item === "KEYBOARD") {
+          // Toggle the on-screen keyboard (off = fill the screen on small devices).
+          sfx("accept");
+          setKeyboardEnabled((k) => !k);
+          navDispatch("accept"); // select so the toggle state shows
+          return;
+        }
         if (item === "RELAY") {
           // Ambient link control: report status (select) + re-link / drop.
           sfx("accept");
@@ -664,6 +676,7 @@ export function App() {
                     ? { title: "PAGES", items: PAGE_ITEMS, cursor: relaySubCursor }
                     : undefined,
                 identityLabel: { handle: identity.handle, fpShort: identity.fingerprint.slice(0, 10).toUpperCase() },
+                keyboardEnabled,
                 stationList: social.stations
                   .filter((s) => Date.now() - s.lastSeen < 300_000)
                   .map((s) => ({ name: s.name, services: s.services, hops: s.hops })),
@@ -689,12 +702,16 @@ export function App() {
           )}
         </div>
         <Buttons onAction={handleButton} />
-        <Keyboard
-          active={!splash && !cart && (!identity || editing !== null)}
-          onType={identity ? editType : loginType}
-          onBackspace={identity ? editBackspace : loginBackspace}
-          onEnter={() => handleButton("accept")}
-        />
+        {/* Always available at login (where Settings can't be reached); post-login
+            it follows the SETTINGS → KEYBOARD toggle. */}
+        {(keyboardEnabled || !identity) && (
+          <Keyboard
+            active={!splash && !cart && (!identity || editing !== null)}
+            onType={identity ? editType : loginType}
+            onBackspace={identity ? editBackspace : loginBackspace}
+            onEnter={() => handleButton("accept")}
+          />
+        )}
         <div className="footer-verbs">{footer}</div>
       </div>
     </div>
