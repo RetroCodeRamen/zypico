@@ -123,9 +123,9 @@ export interface LoginView {
   error?: string;
 }
 
-// The boot splash: the ZyPico wordmark on a clean ground, shown briefly before
-// the login gate. Auto-dismisses; any key skips it (handled by App).
-export function drawSplash(buf: PixelBuffer, frame: number): void {
+// The boot splash: a title screen that waits for input (App dismisses it). The
+// prompt loops gently; with reduced motion it stays static. No auto-dismiss.
+export function drawSplash(buf: PixelBuffer, frame: number, reducedMotion = false): void {
   buf.clear(C.textHi); // white ground (the logo's transparent pixels show through)
   const ox = Math.floor((buf.width - LOGO_W) / 2);
   const oy = Math.floor((buf.height - LOGO_H) / 2) - 4;
@@ -135,7 +135,8 @@ export function drawSplash(buf: PixelBuffer, frame: number): void {
       if (v !== LOGO_TRANSPARENT) buf.set(ox + x, oy + y, v);
     }
   }
-  if (Math.floor(frame / 4) % 2 === 0) drawTextCentered(buf, 70, "PRESS ANY KEY", C.dim);
+  // Gently pulsing prompt (static when the user prefers reduced motion).
+  if (reducedMotion || Math.floor(frame / 4) % 2 === 0) drawTextCentered(buf, 70, "PRESS ANY BUTTON", C.dim);
 }
 
 export function drawLogin(buf: PixelBuffer, frame: number, v: LoginView): void {

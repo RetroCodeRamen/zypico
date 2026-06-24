@@ -47,13 +47,21 @@ export function App() {
   const [nav, navDispatch] = useReducer(navReduce, INITIAL_NAV);
   const [editing, setEditing] = useState<Editing | null>(null);
 
-  // Boot splash (the ZyPico wordmark) — shown briefly before the login gate,
-  // auto-dismissed; any button/key skips it.
+  // Boot splash — a title screen that waits for input (no auto-dismiss timer).
+  // Armed shortly after appearing so a held button carried over from a prior
+  // action can't skip it; dismissed by any button/key/pointer once armed.
   const [splash, setSplash] = useState(true);
+  const splashArmedRef = useRef(false);
+  const reducedMotion = useRef(
+    typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
+  ).current;
   useEffect(() => {
-    const t = setTimeout(() => setSplash(false), 1600);
+    const t = setTimeout(() => { splashArmedRef.current = true; }, 350);
     return () => clearTimeout(t);
   }, []);
+  const dismissSplash = () => {
+    if (splash && splashArmedRef.current) { setSplash(false); sfx("select"); }
+  };
 
   // Identity gate — nothing is shown until the traveler logs in (outline §13.6).
   // On login we load per-identity state and bring the link up; that wiring lives
@@ -203,7 +211,7 @@ export function App() {
 
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
   const handleButton = (action: ButtonAction) => {
-    if (splash) { setSplash(false); sfx("select"); return; }
+    if (splash) { dismissSplash(); return; }
     // A running Cart owns the buttons: CANCEL exits, SELECT/ACCEPT are its input.
     if (cart) {
       if (action === "cancel") exitCart();
@@ -477,7 +485,7 @@ export function App() {
   // reads stale state.
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
-    if (splash) { e.preventDefault(); setSplash(false); return; }
+    if (splash) { e.preventDefault(); dismissSplash(); return; }
     // Arrow keys mirror the three buttons (the mapping you asked for).
     if (e.key === "ArrowLeft") return e.preventDefault(), handleButton("select");
     if (e.key === "ArrowDown") return e.preventDefault(), handleButton("accept");
@@ -567,9 +575,9 @@ export function App() {
         <div className="wordmark">ZyPico</div>
         <div className="shell">
           {splash ? (
-            <div className="lcd">
+            <div className="lcd" onPointerDown={dismissSplash}>
               <div className="matrix">
-                <PixelScreen draw={drawSplash} fps={8} />
+                <PixelScreen draw={(buf, f) => drawSplash(buf, f, reducedMotion)} fps={8} />
               </div>
             </div>
           ) : cart ? (
