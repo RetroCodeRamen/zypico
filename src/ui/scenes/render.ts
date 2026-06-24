@@ -5,8 +5,9 @@
 // Profile), the text-entry field, or the Wisp detail. Pure buffer drawing — no DOM.
 
 import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
-import { CELL_W, drawText, drawTextCentered, measureText } from "@ui/pixel/font.ts";
+import { CELL_H, CELL_W, drawText, drawTextCentered, measureText } from "@ui/pixel/font.ts";
 import { currentPlace, PLACES, type NavState, type PlaceDef, type RelayScene } from "@ui/shell/nav.ts";
+import { caretRowCol, lines, WORKSHOP_MENU, type CartDoc, type WorkshopView } from "@ui/workshop/editor.ts";
 import {
   CARE_DEFS,
   CARES,
@@ -220,6 +221,10 @@ export interface ScreenModel {
   identityLabel?: { handle: string; fpShort: string };
   /** Whether the on-screen keyboard is shown (SETTINGS → KEYBOARD). */
   keyboardEnabled?: boolean;
+  /** The Workshop overlay (Lua editor), when open. */
+  workshop?: WorkshopView | null;
+  /** Names of your authored carts (WORKSHOP → MY CARTS list). */
+  myCartNames?: string[];
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -1054,9 +1059,115 @@ export function drawChat(buf: PixelBuffer, v: ChatView): void {
   drawTextCentered(buf, 73, "ACCEPT WRITE  CANCEL BACK", C.dim);
 }
 
+// ---- The Workshop: on-LCD Lua editor (REDESIGN §Making) --------------------
+
+/** WORKSHOP → MY CARTS: your authored carts + "+ NEW CART", to open in the editor. */
+export function drawWorkshopList(buf: PixelBuffer, cartNames: string[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "WORKSHOP", C.title);
+  drawText(buf, buf.width - measureText("LOC") - 3, 2, "LOC", C.tagLocal);
+  divider(buf, 9);
+  const rows = ["+ NEW CART", ...cartNames];
+  rows.slice(0, 9).forEach((name, i) => {
+    const y = 12 + i * 7;
+    if (i === cursor) drawText(buf, 2, y, ">", C.cursor);
+    drawText(buf, 8, y, name.slice(0, 28), i === cursor ? C.textHi : (i === 0 ? C.ok : C.text));
+  });
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT OPEN  CANCEL BACK", C.dim);
+}
+
+/** WORKSHOP editor: the code on the matrix with a blinking caret + scroll. */
+export function drawWorkshopEditor(buf: PixelBuffer, frame: number, doc: CartDoc): void {
+  buf.clear(C.bg);
+  const title = `EDIT ${doc.name}${doc.dirty ? " *" : ""}`;
+  drawText(buf, 2, 1, title.slice(0, 26), C.title);
+  const { row, col } = caretRowCol(doc.code, doc.caret);
+  const rc = `${row + 1}:${col}`;
+  drawText(buf, buf.width - measureText(rc) - 2, 1, rc, C.dim);
+
+  const ls = lines(doc.code);
+  const top = 9;
+  const rowH = CELL_H; // 6px — denser than menus so ~10 code lines fit
+  const visRows = Math.floor((72 - top) / rowH);
+  const firstRow = row >= visRows ? row - visRows + 1 : 0;
+  const maxCols = Math.floor((buf.width - 4) / CELL_W);
+  const colOff = col >= maxCols ? col - maxCols + 1 : 0;
+  for (let i = 0; i < visRows; i++) {
+    const r = firstRow + i;
+    if (r >= ls.length) break;
+    const text = ls[r].slice(colOff, colOff + maxCols);
+    drawText(buf, 2, top + i * rowH, text, r === row ? C.text : C.dim);
+  }
+  // Blinking caret bar at the caret's on-screen cell.
+  if (Math.floor(frame / 4) % 2 === 0) {
+    buf.fillRect(2 + (col - colOff) * CELL_W, top + (row - firstRow) * rowH, 1, 5, C.cursor);
+  }
+  buf.fillRect(0, 73, buf.width, 7, C.ground);
+  drawTextCentered(buf, 74, "SEL/ACC MOVE  CANCEL MENU", C.dim);
+}
+
+/** WORKSHOP command palette (over the editor): run/save/help/rename/delete/share/exit. */
+export function drawWorkshopMenu(buf: PixelBuffer, cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "CART MENU", C.title);
+  divider(buf, 9);
+  WORKSHOP_MENU.forEach((item, i) => {
+    const y = 12 + i * 8;
+    if (i === cursor) drawText(buf, 2, y, ">", C.cursor);
+    drawText(buf, 8, y, item, i === cursor ? C.textHi : C.text);
+  });
+  drawTextCentered(buf, 74, "ACCEPT DO  CANCEL BACK", C.dim);
+}
+
+/** WORKSHOP API cheat-sheet (the sandbox functions you can call). */
+export function drawWorkshopHelp(buf: PixelBuffer): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 1, "API REFERENCE", C.title);
+  divider(buf, 8);
+  const lines2 = [
+    "CLS(C)  PSET(X,Y,C)",
+    "RECTFILL(X,Y,W,H,C)",
+    "CIRCFILL(X,Y,R,C)",
+    "PRINT(S,X,Y,C)",
+    "BTN(B) 0=SEL 1=ACC 2=CNL",
+    "FLR(N)  RND(N)",
+    "W=128 H=80  FRAME",
+    "CALLBACKS: _INIT",
+    " _UPDATE  _DRAW",
+  ];
+  lines2.forEach((ln, i) => drawText(buf, 2, 11 + i * 6, ln, i >= 7 ? C.ok : C.text));
+  buf.fillRect(0, 73, buf.width, 7, C.ground);
+  drawTextCentered(buf, 74, "CANCEL BACK", C.dim);
+}
+
+/** A full-screen Cart error (compile failure in the Workshop preview). */
+export function drawCartError(buf: PixelBuffer, msg: string): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 3, "CART ERROR", C.warn);
+  divider(buf, 11);
+  wrapText(msg.toUpperCase(), Math.floor((buf.width - 4) / CELL_W)).slice(0, 7)
+    .forEach((ln, i) => drawText(buf, 2, 16 + i * 7, ln, C.text));
+  drawTextCentered(buf, 73, "CANCEL BACK TO EDITOR", C.dim);
+}
+
+/** A one-line runtime-error banner overlaid on a running preview. */
+export function drawErrorBanner(buf: PixelBuffer, msg: string): void {
+  buf.fillRect(0, 73, buf.width, 7, C.warn);
+  drawText(buf, 2, 74, msg.toUpperCase().slice(0, Math.floor((buf.width - 4) / CELL_W)), C.selText);
+}
+
 export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel): void {
   if (model.editing) {
     drawEditor(buf, frame, model.editing);
+    return;
+  }
+  if (model.workshop) {
+    const w = model.workshop;
+    if (w.mode === "list") drawWorkshopList(buf, model.myCartNames ?? [], w.cursor);
+    else if (w.mode === "edit") drawWorkshopEditor(buf, frame, w.doc);
+    else if (w.mode === "menu") drawWorkshopMenu(buf, w.cursor);
+    else drawWorkshopHelp(buf);
     return;
   }
   if (model.wispView) {

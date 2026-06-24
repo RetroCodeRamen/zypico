@@ -4,7 +4,11 @@ import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES, RELAY_SCENES, type RelayScene } from "@ui/shell/nav.ts";
-import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
+import { careActionCount, drawCartError, drawErrorBanner, drawLogin, drawSplash } from "@ui/scenes/render.ts";
+import {
+  CART_TEMPLATE, caretDown, caretLeft, caretRight, caretUp, cleanName, deleteBack, insertAt,
+  WORKSHOP_MENU, type WorkshopView,
+} from "@ui/workshop/editor.ts";
 import type { EditView, ExchangeView, MoodSummary, PageView, PostView, VaultView } from "@ui/scenes/render.ts";
 import {
   applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
@@ -21,7 +25,7 @@ import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
 import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
-import { CartRunner } from "@ui/cart/CartRunner.ts";
+import { CartRunner, cleanLuaError } from "@ui/cart/CartRunner.ts";
 import { SAMPLE_CARTS } from "@ui/cart/samples.ts";
 // Bundle the Lua WASM as a local asset so Carts run offline on the board.
 import luaWasmUrl from "wasmoon/dist/glue.wasm?url";
@@ -122,22 +126,26 @@ export function App() {
   const vault = useVault(identity, link, reloadLocal);
   const [vaultView, setVaultView] = useState<VaultView | null>(null);
 
-  // A running Cart (the Arcade): runner null = still loading the Lua engine.
-  const [cart, setCart] = useState<{ runner: CartRunner | null; name: string } | null>(null);
+  // A running Cart (Arcade game, or a Workshop preview). runner null + no error
+  // = still loading; error set = compile failure; preview = launched to test.
+  const [cart, setCart] = useState<{ runner: CartRunner | null; name: string; error: string | null; preview: boolean } | null>(null);
   const cartPressRef = useRef({ select: 0, accept: 0 }); // last tap times → momentary input
 
-  const launchCart = (name: string, code: string) => {
+  const launchCart = (name: string, code: string, preview = false) => {
     sfx("accept");
     cartPressRef.current = { select: 0, accept: 0 };
-    setCart({ runner: null, name });
+    setCart({ runner: null, name, error: null, preview });
     void CartRunner.load(code, luaWasmUrl).then((r) => {
-      setCart((cur) => (cur && cur.name === name && cur.runner === null ? { runner: r, name } : (r.dispose(), cur)));
+      setCart((cur) => (cur && cur.name === name && cur.runner === null && !cur.error ? { runner: r, name, error: null, preview } : (r.dispose(), cur)));
+    }).catch((e) => {
+      setCart((cur) => (cur && cur.name === name ? { runner: null, name, error: cleanLuaError(e), preview } : cur));
     });
   };
-  const exitCart = () => { cart?.runner?.dispose(); setCart(null); };
+  const exitCart = () => { cart?.runner?.dispose(); setCart(null); }; // workshop editor (if any) shows again
 
   // Draw the running Cart into the matrix, feeding it momentary button input.
   const cartDraw = (buf: PixelBuffer, _frame: number) => {
+    if (cart?.error) { drawCartError(buf, cart.error); return; } // compile failure
     const r = cart?.runner;
     if (!r) { buf.clear(1); return; } // brief load
     const now = Date.now();
@@ -147,7 +155,34 @@ export function App() {
       cancel: false,
     });
     r.render(buf);
+    const err = cart?.preview ? r.getError() : null; // surface runtime errors in preview
+    if (err) drawErrorBanner(buf, err);
   };
+
+  // The Workshop (Lua dev env): list → editor → command menu / help. Preview
+  // reuses the Cart overlay above. myCarts = the carts you authored (editable).
+  const [workshop, setWorkshop] = useState<WorkshopView | null>(null);
+  const myCarts = identity ? cartExchange.carts.filter((c) => c.authorFp === identity.fingerprint) : [];
+  const newCartName = () => {
+    const names = new Set(myCarts.map((c) => c.name));
+    if (!names.has("MYCART")) return "MYCART";
+    let i = 2;
+    while (names.has(`MYCART${i}`)) i++;
+    return `MYCART${i}`;
+  };
+  // Editor text ops applied to the open edit doc (typing + caret movement).
+  const wsInsert = (s: string) => setWorkshop((w) => {
+    if (!w || w.mode !== "edit") return w;
+    const r = insertAt(w.doc.code, w.doc.caret, s);
+    return { mode: "edit", doc: { ...w.doc, code: r.code, caret: r.caret, dirty: true } };
+  });
+  const wsBackspace = () => setWorkshop((w) => {
+    if (!w || w.mode !== "edit") return w;
+    const r = deleteBack(w.doc.code, w.doc.caret);
+    return { mode: "edit", doc: { ...w.doc, code: r.code, caret: r.caret, dirty: true } };
+  });
+  const wsCaret = (fn: (code: string, caret: number) => number) => setWorkshop((w) =>
+    w && w.mode === "edit" ? { mode: "edit", doc: { ...w.doc, caret: fn(w.doc.code, w.doc.caret) } } : w);
 
   // Reached at login (after identity is derived, before the gate lifts).
   postAuthRef.current = (id: Identity) => {
@@ -252,6 +287,61 @@ export function App() {
       if (action === "accept") { sfx("accept"); editSubmit(); }
       else if (action === "cancel") editCancel();
       return; // SELECT is inert while editing
+    }
+
+    // THE WORKSHOP (Lua dev env). list → editor → command menu / help. In the
+    // editor the keyboard types; the three buttons move the caret + open the menu.
+    if (workshop) {
+      if (workshop.mode === "list") {
+        const count = 1 + myCarts.length; // "+ NEW CART" + your carts
+        if (action === "select") setWorkshop({ mode: "list", cursor: (workshop.cursor + 1) % count });
+        else if (action === "accept") {
+          if (workshop.cursor === 0) {
+            const name = newCartName();
+            setWorkshop({ mode: "edit", doc: { name, code: CART_TEMPLATE, caret: CART_TEMPLATE.length, dirty: true, origName: null } });
+          } else {
+            const c = myCarts[workshop.cursor - 1];
+            if (c) setWorkshop({ mode: "edit", doc: { name: c.name, code: c.code, caret: 0, dirty: false, origName: c.name } });
+          }
+        } else if (action === "cancel") { setWorkshop(null); navDispatch("cancel"); }
+        return;
+      }
+      if (workshop.mode === "edit") {
+        const doc = workshop.doc;
+        if (action === "select") wsCaret(caretLeft);
+        else if (action === "accept") wsCaret(caretRight);
+        else if (action === "cancel") setWorkshop({ mode: "menu", cursor: 0, doc });
+        return;
+      }
+      if (workshop.mode === "menu") {
+        const doc = workshop.doc;
+        if (action === "select") { setWorkshop({ mode: "menu", cursor: (workshop.cursor + 1) % WORKSHOP_MENU.length, doc }); return; }
+        if (action === "cancel") { setWorkshop({ mode: "edit", doc }); return; }
+        if (action === "accept") {
+          const cmd = WORKSHOP_MENU[workshop.cursor];
+          if (cmd === "RUN") { setWorkshop({ mode: "edit", doc }); launchCart(doc.name || "PREVIEW", doc.code, true); }
+          else if (cmd === "SAVE") {
+            const name = cleanName(doc.name);
+            cartExchange.saveCart(name, doc.code); sfx("accept");
+            setWorkshop({ mode: "edit", doc: { ...doc, name, dirty: false, origName: name } });
+          } else if (cmd === "API HELP") setWorkshop({ mode: "help", doc });
+          else if (cmd === "RENAME") {
+            setEditing({ label: "CART NAME", value: doc.name, onSubmit: (v) => setWorkshop({ mode: "edit", doc: { ...doc, name: cleanName(v), dirty: true } }) });
+          } else if (cmd === "DELETE") {
+            if (doc.origName) cartExchange.deleteCart(doc.origName);
+            sfx("cancel"); setWorkshop({ mode: "list", cursor: 0 });
+          } else if (cmd === "SHARE") {
+            const name = cleanName(doc.name);
+            cartExchange.saveCart(name, doc.code); cartExchange.shareCart(name, doc.code); sfx("accept");
+            setWorkshop({ mode: "edit", doc: { ...doc, name, dirty: false, origName: name } });
+          } else if (cmd === "EXIT") setWorkshop({ mode: "list", cursor: 0 });
+        }
+        return;
+      }
+      if (workshop.mode === "help") {
+        if (action === "cancel") setWorkshop({ mode: "edit", doc: workshop.doc });
+        return;
+      }
     }
 
     // WISP Place. Stats panel is view-only (CANCEL returns to care). Care panel:
@@ -483,11 +573,14 @@ export function App() {
         if (s) launchCart(s.name, s.code);
         return;
       }
-      if (place.id === "workshop" && item === "CARTS") {
-        sfx("accept");
-        cartExchange.publish(); // share our Carts while we're here
-        setExchangeView({ cursor: 0 });
-        return;
+      if (place.id === "workshop") {
+        if (item === "MY CARTS") { sfx("accept"); setWorkshop({ mode: "list", cursor: 0 }); return; }
+        if (item === "EXCHANGE") {
+          sfx("accept");
+          cartExchange.publish(); // share our Carts while we're here
+          setExchangeView({ cursor: 0 });
+          return;
+        }
       }
       if (place.id === "profile" && item === "VAULT") {
         sfx("accept");
@@ -531,6 +624,20 @@ export function App() {
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
   keyRef.current = (e: KeyboardEvent) => {
     if (splash) { e.preventDefault(); dismissSplash(); return; }
+    // Workshop code editor: keys type/edit directly; arrows move the caret
+    // (incl. up/down lines), Enter = newline, Esc = command menu. Takes priority
+    // over the arrow→button mapping so the caret moves instead of navigating.
+    if (workshop?.mode === "edit" && identity && !editing && !cart) {
+      if (e.key === "ArrowLeft") return e.preventDefault(), wsCaret(caretLeft);
+      if (e.key === "ArrowRight") return e.preventDefault(), wsCaret(caretRight);
+      if (e.key === "ArrowUp") return e.preventDefault(), wsCaret(caretUp);
+      if (e.key === "ArrowDown") return e.preventDefault(), wsCaret(caretDown);
+      if (e.key === "Enter") return e.preventDefault(), wsInsert("\n");
+      if (e.key === "Backspace") return e.preventDefault(), wsBackspace();
+      if (e.key === "Escape") return e.preventDefault(), setWorkshop({ mode: "menu", cursor: 0, doc: workshop.doc });
+      if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) return e.preventDefault(), wsInsert(e.key);
+      return;
+    }
     // Arrow keys mirror the three buttons (the mapping you asked for).
     if (e.key === "ArrowLeft") return e.preventDefault(), handleButton("select");
     if (e.key === "ArrowDown") return e.preventDefault(), handleButton("accept");
@@ -579,9 +686,17 @@ export function App() {
       ? "TYPE · SELECT field · ACCEPT create"
       : "TYPE password · ACCEPT login · CANCEL switch"
     : cart
-      ? "SELECT / ACCEPT play · CANCEL exit"
+      ? cart.error || cart.preview ? "CANCEL back to editor" : "SELECT / ACCEPT play · CANCEL exit"
     : editing
       ? "TYPE · ACCEPT ok · CANCEL back"
+      : workshop
+        ? workshop.mode === "edit"
+          ? "TYPE code · SEL/ACC caret · CANCEL menu"
+          : workshop.mode === "menu"
+            ? "SELECT move · ACCEPT do · CANCEL back"
+            : workshop.mode === "help"
+              ? "CANCEL back"
+              : "SELECT move · ACCEPT open · CANCEL back"
       : wispView
         ? wispView.panel === "stats"
           ? "CANCEL back to care"
@@ -677,6 +792,8 @@ export function App() {
                     : undefined,
                 identityLabel: { handle: identity.handle, fpShort: identity.fingerprint.slice(0, 10).toUpperCase() },
                 keyboardEnabled,
+                workshop,
+                myCartNames: myCarts.map((c) => c.name),
                 stationList: social.stations
                   .filter((s) => Date.now() - s.lastSeen < 300_000)
                   .map((s) => ({ name: s.name, services: s.services, hops: s.hops })),
@@ -690,6 +807,7 @@ export function App() {
                 setPostView(null);
                 setVaultView(null);
                 setExchangeView(null);
+                setWorkshop(null);
                 navDispatch({ type: "goto", index });
               }}
             />
@@ -706,10 +824,10 @@ export function App() {
             it follows the SETTINGS → KEYBOARD toggle. */}
         {(keyboardEnabled || !identity) && (
           <Keyboard
-            active={!splash && !cart && (!identity || editing !== null)}
-            onType={identity ? editType : loginType}
-            onBackspace={identity ? editBackspace : loginBackspace}
-            onEnter={() => handleButton("accept")}
+            active={!splash && !cart && (!identity || editing !== null || workshop?.mode === "edit")}
+            onType={workshop?.mode === "edit" ? wsInsert : identity ? editType : loginType}
+            onBackspace={workshop?.mode === "edit" ? wsBackspace : identity ? editBackspace : loginBackspace}
+            onEnter={workshop?.mode === "edit" ? () => wsInsert("\n") : () => handleButton("accept")}
           />
         )}
         <div className="footer-verbs">{footer}</div>

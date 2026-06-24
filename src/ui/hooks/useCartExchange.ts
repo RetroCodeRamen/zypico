@@ -42,6 +42,30 @@ export function useCartExchange(identity: Identity | null, link: Relay) {
   /** Ask a peer/Station for a specific Cart. */
   const requestCart = (authorFp: string, name: string) => link.send(SubType.CART_REQ, encodeCartReq(authorFp, name));
 
+  /** Author/overwrite one of your Carts (signs it). Same name = edit in place. */
+  const saveCart = (name: string, code: string) => {
+    const me = identityRef.current;
+    if (!me) return;
+    const payload = encodeCart(me, name, code);
+    const d = decodeCart(payload);
+    if (!d) return;
+    setCarts((list) => addCart(list, { authorFp: d.authorFp, author: d.author, name: d.name, code: d.code, at: Date.now(), payload: [...payload] }));
+  };
+
+  /** Delete one of your Carts (only your own — others' are re-served verbatim). */
+  const deleteCart = (name: string) => {
+    const me = identityRef.current;
+    if (!me) return;
+    setCarts((list) => list.filter((c) => !(c.authorFp === me.fingerprint && c.name === name)));
+  };
+
+  /** Share one Cart now: sign + broadcast it (peers/Stations hold + spread it). */
+  const shareCart = (name: string, code: string) => {
+    const me = identityRef.current;
+    if (!me) return;
+    link.send(SubType.CART, encodeCart(me, name, code));
+  };
+
   const load = (fp: string) => {
     let held = loadCarts(fp);
     const me = identityRef.current;
@@ -57,5 +81,5 @@ export function useCartExchange(identity: Identity | null, link: Relay) {
     setCarts(held);
   };
 
-  return { carts, publish, requestCart, load };
+  return { carts, publish, requestCart, saveCart, deleteCart, shareCart, load };
 }

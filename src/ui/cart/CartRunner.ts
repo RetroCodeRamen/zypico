@@ -11,6 +11,13 @@ import { drawText } from "@ui/pixel/font.ts";
 
 export interface CartInput { select: boolean; accept: boolean; cancel: boolean }
 
+/** Trim wasmoon's noisy error text to the useful "[string]:line: message" tail. */
+export function cleanLuaError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  const m = msg.match(/\[string[^\]]*\]:(\d+):\s*(.*)/);
+  return m ? `LINE ${m[1]}: ${m[2]}` : msg.split("\n")[0].slice(0, 60);
+}
+
 // Remove every ambient capability before any Cart code runs.
 const STRIP_HOST = "io=nil os=nil require=nil dofile=nil loadfile=nil package=nil load=nil debug=nil collectgarbage=nil";
 
@@ -21,6 +28,8 @@ export class CartRunner {
   private target = new PixelBuffer();
   private update?: () => void;
   private draw?: () => void;
+  /** Last runtime error message (for the Workshop preview), or null. */
+  private runtimeError: string | null = null;
 
   private constructor(private readonly lua: LuaEngine) {}
 
@@ -64,10 +73,17 @@ export class CartRunner {
     try {
       this.update?.();
       this.draw?.();
-    } catch {
-      /* swallow Cart errors — the shell keeps running */
+    } catch (e) {
+      // Swallow so a buggy Cart can't crash the shell; remember it for the
+      // Workshop preview to surface (the Arcade ignores it).
+      this.runtimeError = cleanLuaError(e);
     }
     this.frame++;
+  }
+
+  /** The last runtime error, if any (Workshop preview). */
+  getError(): string | null {
+    return this.runtimeError;
   }
 
   dispose(): void {
