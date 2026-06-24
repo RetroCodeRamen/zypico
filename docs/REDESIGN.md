@@ -544,6 +544,40 @@ arrival scenes + items + memory.
 
 ---
 
+## 16. Hostname + HTTPS (`zypico.local` on the device)
+
+Goal: when the phone joins the board's AP, the UI opens **by name** with minimal
+"type an IP" friction — and, ideally, without the browser's "Not secure" nag.
+
+We do **not** own `zypico.com`, so the device uses the local name **`zypico.local`**.
+
+**A. Hostname + captive portal — IMPLEMENTED (HTTP, no cert).**
+The board runs a **DNS server** on its AP (`DNSServer`) that answers *every* query
+with the AP IP (`192.168.4.1`), so `zypico.local` (and any other host) resolves to
+the board. It also advertises **mDNS** (`MDNS.begin("zypico")`) so mDNS-aware
+clients resolve `zypico.local` directly. The web server serves the SPA for any
+unknown host/path (`server.onNotFound` → `/index.html`), which also answers the
+OS connectivity-probe URLs so the phone **auto-opens** the page (captive-portal
+style) instead of making you type an IP. This is **HTTP**, so the address bar can
+still say "Not secure" — but there is **no blocking wall** and no IP to type.
+
+**B. Real HTTPS with a clean padlock — the honest reality.**
+A *no-warning* padlock requires a certificate that the browser already trusts.
+Because `.local` / private IPs are **not eligible for public CA certs** (Let's
+Encrypt et al. won't issue for them), the only ways to a trusted padlock are:
+- **Per-device custom CA**: generate our own CA, install **its root** on each
+  phone/laptop once (the OS trust store), and serve a `zypico.local` leaf signed by
+  it. Trusted padlock, fully offline — but every client must install the root first.
+- A **self-signed** cert is **not** a fix: it *is* the "continue anyway" wall.
+
+Given there's no domain we control, **(A) is the right default** — it removes the
+real friction (the IP-typing + the blocking interstitial) today. **(B)** is only
+worth it if you want a literal padlock and accept the per-device root-install step;
+say the word and I'll wire a TLS server (`esp_https_server`) + a CA/leaf generator.
+
+**Status:** (A) is built and flashed to both boards (captive `DNSServer` +
+`MDNS` + SPA `onNotFound` fallback in `firmware/heltec-v3/src/main.cpp`).
+
 ## Splash screen behavior (title screen — implemented)
 
 The splash is now a **title screen that waits for input**, not a timed overlay:

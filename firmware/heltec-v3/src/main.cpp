@@ -24,6 +24,8 @@
 #include <RadioLib.h>
 #include <ESPAsyncWebServer.h>
 #include <U8g2lib.h>
+#include <DNSServer.h>
+#include <ESPmDNS.h>
 #include "logo_xbm.h" // generated: tools/gen-logo.py
 
 // --- Heltec V3 onboard SSD1306 OLED (128x64, I2C) ---
@@ -62,6 +64,8 @@ static U8G2_SSD1306_128X64_NONAME_F_HW_I2C oled(U8G2_R0, PIN_OLED_RST, PIN_OLED_
 static SX1262 radio = new Module(PIN_NSS, PIN_DIO1, PIN_RST, PIN_BUSY);
 static AsyncWebServer server(80);
 static AsyncWebSocket ws("/ws");
+static DNSServer dnsServer; // captive: every name resolves to the board
+#define ZYPICO_HOST "zypico" // → zypico.local via mDNS
 
 static uint32_t nodeId = 0;
 static uint16_t txSeq = 0;
@@ -151,7 +155,15 @@ void setup() {
   // "ZyPico", limited to ONE connected device (max_connection = 1).
   WiFi.mode(WIFI_AP);
   bool apok = WiFi.softAP(apSsid, nullptr, 1 /*channel*/, 0 /*hidden*/, 1 /*max_connection*/);
-  Serial.printf("softAP=%d  IP=%s\n", apok, WiFi.softAPIP().toString().c_str());
+  IPAddress apIP = WiFi.softAPIP();
+  Serial.printf("softAP=%d  IP=%s\n", apok, apIP.toString().c_str());
+
+  // Captive DNS: answer EVERY lookup with our AP IP, so "zypico.local" (and any
+  // other host) resolves to the board and the phone's captive check opens the
+  // page automatically — no typing an IP.
+  dnsServer.setErrorReplyCode(DNSReplyCode::NoError);
+  dnsServer.start(53, "*", apIP);
+  if (MDNS.begin(ZYPICO_HOST)) MDNS.addService("http", "tcp", 80); // zypico.local for mDNS clients
 
   bool fsok = LittleFS.begin(true);
   Serial.printf("LittleFS mount=%d total=%u used=%u\n", fsok,
@@ -173,6 +185,11 @@ void setup() {
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
+  // SPA + captive fallback: any unknown host/path (incl. OS connectivity probes)
+  // gets the app, so the phone's captive sign-in opens ZyPico instead of warning.
+  server.onNotFound([](AsyncWebServerRequest *req) {
+    req->send(LittleFS, "/index.html", "text/html");
+  });
   server.begin();
 
   // Onboard OLED: power it via Vext, reset, then show the ZyPico splash/status.
@@ -276,6 +293,7 @@ void loop() {
   }
 
   ws.cleanupClients();
+  dnsServer.processNextRequest(); // captive DNS
 
   // USER button toggles the OLED between the logo splash and the info screen.
   static bool prevDown = false;
