@@ -6,7 +6,7 @@
 
 import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
 import { CELL_W, drawText, drawTextCentered, measureText } from "@ui/pixel/font.ts";
-import { currentPlace, PLACES, type NavState, type PlaceDef } from "@ui/shell/nav.ts";
+import { currentPlace, PLACES, type NavState, type PlaceDef, type RelayScene } from "@ui/shell/nav.ts";
 import {
   CARE_DEFS,
   CARES,
@@ -209,6 +209,13 @@ export interface ScreenModel {
   /** COMMONS sub-panel: chat, or the discovered-Stations list (travel, §6.2). */
   commonsPanel: "chat" | "stations";
   stationList: StationRow[];
+  /** Which Relay scene is open (Commons/Travelers/Post/Pages/Stations), or null
+   *  for the Relay's own scene menu (REDESIGN §8). */
+  relayScene?: RelayScene | null;
+  /** The Post/Pages sub-menu inside the Relay (its items + cursor). */
+  relaySub?: { title: string; items: string[]; cursor: number };
+  /** Who you are, for the PROFILE place (handle + short fingerprint). */
+  identityLabel?: { handle: string; fpShort: string };
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -397,10 +404,49 @@ export function drawPlace(buf: PixelBuffer, place: PlaceDef, state: NavState): v
   }
 }
 
-// PROFILE — identity + settings, plus the ambient Relay link report. RELAY is a
-// status item here (not a navigation destination, DESIGN §6.1): selecting it
-// shows the connection and re-links; SETTINGS shows the sound toggle.
+// A titled item list (the Relay's Post/Pages sub-menus, REDESIGN §8).
+export function drawSubMenu(buf: PixelBuffer, title: string, items: string[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, title, C.title);
+  drawText(buf, buf.width - measureText("REL") - 3, 2, "REL", C.tagRelay);
+  divider(buf, 9);
+  items.forEach((item, i) => {
+    const y = 13 + i * 7;
+    if (i === cursor) drawText(buf, 2, y, ">", C.cursor);
+    drawText(buf, 8, y, item, i === cursor ? C.textHi : C.text);
+  });
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT OPEN  CANCEL BACK", C.dim);
+}
+
+// PROFILE — who you are: identity + Vault (system config moved to SETTINGS, §1).
 export function drawProfile(
+  buf: PixelBuffer,
+  place: PlaceDef,
+  state: NavState,
+  identity: { handle: string; fpShort: string } | undefined,
+): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, place.label, C.title);
+  drawText(buf, buf.width - measureText("LOC") - 3, 2, "LOC", C.tagLocal);
+  divider(buf, 9);
+  drawItems(buf, place.items, state, 13);
+
+  if (state.selectedItem === null) return;
+  const item = place.items[state.selectedItem];
+  divider(buf, 45);
+  if (item === "IDENTITY" && identity) {
+    drawTextCentered(buf, 49, `@${identity.handle}`.slice(0, 18), C.textHi);
+    drawTextCentered(buf, 57, identity.fpShort, C.dim);
+  } else {
+    drawTextCentered(buf, 49, "NOT BUILT YET", C.warn);
+    drawTextCentered(buf, 57, "CANCEL TO GO BACK", C.dim);
+  }
+}
+
+// SETTINGS — system config: sound on/off + the ambient Relay link report (RELAY
+// is a status item, not a destination — DESIGN §6.1).
+export function drawSettings(
   buf: PixelBuffer,
   place: PlaceDef,
   state: NavState,
@@ -416,7 +462,10 @@ export function drawProfile(
   if (state.selectedItem === null) return;
   const item = place.items[state.selectedItem];
   divider(buf, 45);
-  if (item === "RELAY") {
+  if (item === "SOUND") {
+    drawTextCentered(buf, 49, muted ? "SOUND: OFF" : "SOUND: ON", muted ? C.dim : C.ok);
+    drawTextCentered(buf, 57, "ACCEPT TO TOGGLE", C.dim);
+  } else if (item === "RELAY") {
     drawTextCentered(buf, 49, relay.statusLabel, relay.online ? C.ok : relay.detail ? C.warn : C.dim);
     if (relay.online) {
       drawTextCentered(buf, 57, `VIA ${relay.via ?? "LINK"}`, C.text);
@@ -427,9 +476,6 @@ export function drawProfile(
     } else {
       drawTextCentered(buf, 57, "ACCEPT TO RECONNECT", C.dim);
     }
-  } else if (item === "SETTINGS") {
-    drawTextCentered(buf, 49, muted ? "SOUND: OFF" : "SOUND: ON", muted ? C.dim : C.ok);
-    drawTextCentered(buf, 57, "ACCEPT TO TOGGLE", C.dim);
   } else {
     drawTextCentered(buf, 49, "NOT BUILT YET", C.warn);
     drawTextCentered(buf, 57, "CANCEL TO GO BACK", C.dim);
@@ -918,9 +964,18 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     return;
   }
   const place = currentPlace(nav);
-  if (place.id === "travelers" && model.friends) drawFriends(buf, model.friends);
-  else if (place.id === "commons" && model.commonsPanel === "stations") drawStations(buf, model.stationList);
-  else if (place.id === "commons" && model.chat) drawChat(buf, model.chat);
-  else if (place.id === "profile") drawProfile(buf, place, nav, model.relay, model.muted);
+  if (place.id === "relay") {
+    // The Relay's scenes (REDESIGN §8) — Commons/Travelers/Stations are live
+    // surfaces; The Post/Pages open a sub-menu; null = the scene picker.
+    if (model.relayScene === "travelers" && model.friends) drawFriends(buf, model.friends);
+    else if (model.relayScene === "commons" && model.chat) drawChat(buf, model.chat);
+    else if (model.relayScene === "stations") drawStations(buf, model.stationList);
+    else if ((model.relayScene === "post" || model.relayScene === "pages") && model.relaySub) {
+      drawSubMenu(buf, model.relaySub.title, model.relaySub.items, model.relaySub.cursor);
+    } else drawPlace(buf, place, nav);
+    return;
+  }
+  if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
+  else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted);
   else drawPlace(buf, place, nav);
 }

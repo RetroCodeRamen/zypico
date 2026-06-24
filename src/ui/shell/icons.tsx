@@ -16,45 +16,20 @@ const COMMON = {
 };
 
 const PATHS: Record<Place, ReactNode> = {
-  // The Commons — the town square: a speech bubble (public chat / gathering).
-  commons: (
+  // Home — the Wisp's room: a little house (REDESIGN §2).
+  home: (
     <>
-      <path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H9l-4 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
-      <line x1="7" y1="9" x2="17" y2="9" />
-      <line x1="7" y1="12" x2="13" y2="12" />
+      <path d="M4 11l8-7 8 7" />
+      <path d="M6 10v9h12v-9" />
+      <rect x="10" y="14" width="4" height="5" />
     </>
   ),
-  // Travelers — two people (friends met on your travels).
-  travelers: (
+  // The Relay — radio tower with broadcast arcs (the social region).
+  relay: (
     <>
-      <circle cx="9" cy="8" r="3" />
-      <path d="M3 20c0-3 3-5 6-5s6 2 6 5" />
-      <path d="M16 6.5a3 3 0 0 1 0 5M17 15c2 0 4 2 4 5" />
-    </>
-  ),
-  // The Post — envelope (Mail).
-  post: (
-    <>
-      <rect x="3" y="5" width="18" height="14" rx="2" />
-      <path d="M3 7l9 6 9-6" />
-    </>
-  ),
-  // Pages — a document with lines (Traveler Pages + Guestbooks).
-  pages: (
-    <>
-      <path d="M6 3h8l4 4v14a0 0 0 0 1 0 0H6a0 0 0 0 1 0 0z" />
-      <path d="M14 3v4h4" />
-      <line x1="8" y1="12" x2="16" y2="12" />
-      <line x1="8" y1="15" x2="16" y2="15" />
-      <line x1="8" y1="18" x2="13" y2="18" />
-    </>
-  ),
-  // Wisp — the companion: a little spark/creature with a glow.
-  wisp: (
-    <>
-      <path d="M12 4c4 0 7 3 7 7 0 5-4 6-4 9H9c0-3-4-4-4-9 0-4 3-7 7-7z" />
-      <circle cx="9.5" cy="11" r="1" fill="currentColor" stroke="none" />
-      <circle cx="14.5" cy="11" r="1" fill="currentColor" stroke="none" />
+      <path d="M9 21l3-9 3 9" />
+      <line x1="10" y1="17" x2="14" y2="17" />
+      <path d="M8 8a5 5 0 0 1 8 0M6 6a8 8 0 0 1 12 0" />
     </>
   ),
   // Arcade — a die (outline §13.1 "die = Arcade").
@@ -68,10 +43,17 @@ const PATHS: Record<Place, ReactNode> = {
       <circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none" />
     </>
   ),
-  // The Exchange — a marketplace: swap arrows (items, themes, Carts).
-  exchange: (
+  // Workshop — a wrench over a workbench (create / edit Carts, §2).
+  workshop: (
     <>
-      <path d="M4 9h13l-4-4M20 15H7l4 4" />
+      <path d="M14.5 4a3.5 3.5 0 0 0-4.6 4.3l-5 5 2.6 2.6 5-5A3.5 3.5 0 0 0 18 7l-2.3 2.3-1.7-1.7L16.3 5.3A3.5 3.5 0 0 0 14.5 4z" />
+    </>
+  ),
+  // Bag — a satchel / pouch (items + collection, §2).
+  bag: (
+    <>
+      <path d="M6 9h12l-1 11H7L6 9z" />
+      <path d="M9 9V7a3 3 0 0 1 6 0v2" />
     </>
   ),
   // Profile — single head + shoulders.
@@ -79,6 +61,20 @@ const PATHS: Record<Place, ReactNode> = {
     <>
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20c0-4 3-6 7-6s7 2 7 6" />
+    </>
+  ),
+  // Settings — a gear (system config, §2).
+  settings: (
+    <>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1" />
+    </>
+  ),
+  // Alerts — a bell that lights up when something needs you (last slot, §2).
+  alerts: (
+    <>
+      <path d="M6 16a6 6 0 0 1 0-8 6 6 0 0 1 12 0 6 6 0 0 1 0 8z" />
+      <path d="M10.5 19a1.6 1.6 0 0 0 3 0" />
     </>
   ),
 };

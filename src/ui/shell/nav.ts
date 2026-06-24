@@ -11,35 +11,44 @@
 // back toward it (outline §13.5). The reducer is pure and DOM-free so it
 // unit-tests in isolation (plan §9 tier 1); rendering reads this state.
 
-// The eight Places of the Relay (DESIGN §6.2). Home/landing is your Wisp; you
-// travel *into* the Relay from there. Connectivity is ambient — there is no
-// "Radio" destination (DESIGN §6.1). Some Places (Commons, Travelers, Wisp)
-// render a live surface rather than this item menu; the rest are placeholders
-// that later milestones (Mail M6, Pages M5, Arcade M9, Exchange M8) fill in.
+// The eight destinations, grouped by *meaning* not by backend (REDESIGN §1).
+// Home is the Wisp's room (the hub you travel out from); The Relay is the one
+// social region holding Commons/Travelers/Mail/Pages/Stations as scenes; the
+// rest are Arcade/Workshop/Bag/Profile/Settings/Alerts. Alerts is always the
+// last slot — the Tamagotchi attention light (REDESIGN §1, §2).
 export type Place =
-  | "commons" | "travelers" | "post" | "pages"
-  | "wisp" | "arcade" | "exchange" | "profile";
+  | "home" | "relay" | "arcade" | "workshop"
+  | "bag" | "profile" | "settings" | "alerts";
+
+// The scenes inside The Relay (REDESIGN §1, §8). These are the relay place's
+// menu items; Commons/Travelers/Stations render a live surface, while The Post
+// and Pages open a small sub-menu into their existing overlays.
+export type RelayScene = "commons" | "travelers" | "post" | "pages" | "stations";
 
 export interface PlaceDef {
   id: Place;
   label: string;
   /** Local surfaces work offline; relay surfaces travel to the mesh (DESIGN §5). */
   scope: "local" | "relay";
-  /** Placeholder menu items — real per-phase functionality fills these in later. */
+  /** Menu items — real per-phase functionality fills these in later. */
   items: string[];
 }
 
-// Ring order matches the icon layout: top row then bottom row (outline §13.1).
+// Ring order matches the icon layout: top row then bottom row (outline §13.1),
+// Alerts fixed in the final slot (REDESIGN §2).
 export const PLACES: PlaceDef[] = [
-  { id: "commons", label: "COMMONS", scope: "relay", items: ["CHAT"] },
-  { id: "travelers", label: "TRAVELERS", scope: "relay", items: ["LIST"] },
-  { id: "post", label: "THE POST", scope: "relay", items: ["INBOX", "COMPOSE", "OUTBOX"] },
-  { id: "pages", label: "PAGES", scope: "relay", items: ["MY PAGE", "BROWSE", "GUESTBOOK"] },
-  { id: "wisp", label: "WISP", scope: "local", items: ["CARE"] },
+  { id: "home", label: "WISP", scope: "local", items: ["CARE"] },
+  { id: "relay", label: "THE RELAY", scope: "relay", items: ["COMMONS", "TRAVELERS", "THE POST", "PAGES", "STATIONS"] },
   { id: "arcade", label: "ARCADE", scope: "local", items: ["BOUNCER", "STARFIELD"] },
-  { id: "exchange", label: "EXCHANGE", scope: "local", items: ["ITEMS", "THEMES", "CARTS"] },
-  { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "VAULT", "RELAY", "SETTINGS"] },
+  { id: "workshop", label: "WORKSHOP", scope: "local", items: ["CARTS"] },
+  { id: "bag", label: "BAG", scope: "local", items: ["ITEMS"] },
+  { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "VAULT"] },
+  { id: "settings", label: "SETTINGS", scope: "local", items: ["SOUND", "RELAY"] },
+  { id: "alerts", label: "ALERTS", scope: "local", items: ["NONE"] },
 ];
+
+/** The Relay scene that a given relay menu item opens. */
+export const RELAY_SCENES: RelayScene[] = ["commons", "travelers", "post", "pages", "stations"];
 
 /** Index of a Place in the ring (for direct navigation / special-casing). */
 export function placeIndex(id: Place): number {

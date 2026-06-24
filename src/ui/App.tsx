@@ -3,7 +3,7 @@ import { Screen } from "@ui/shell/Screen.tsx";
 import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
-import { currentPlace, INITIAL_NAV, navReduce, PLACES } from "@ui/shell/nav.ts";
+import { currentPlace, INITIAL_NAV, navReduce, PLACES, RELAY_SCENES, type RelayScene } from "@ui/shell/nav.ts";
 import { careActionCount, drawLogin, drawSplash } from "@ui/scenes/render.ts";
 import type { EditView, ExchangeView, MoodSummary, PageView, PostView, VaultView } from "@ui/scenes/render.ts";
 import {
@@ -38,6 +38,11 @@ const CAN_RAISE = import.meta.env.DEV;
 interface Editing extends EditView {
   onSubmit: (value: string) => void;
 }
+
+// The Relay's Post/Pages sub-menus (REDESIGN §8) — labels shown in the sub-menu
+// and indexed by relaySubCursor to open the matching overlay panel.
+const POST_ITEMS = ["INBOX", "WRITE MAIL", "OUTBOX"];
+const PAGE_ITEMS = ["MY PAGE", "BROWSE", "GUESTBOOK"];
 
 // The interface is the Tamagotchi shell: a screen unit (icons + 128×80 matrix)
 // driven by three buttons, with an HTML keyboard below for text entry. App is
@@ -84,6 +89,11 @@ export function App() {
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
   const [commonsPanel, setCommonsPanel] = useState<"chat" | "stations">("chat"); // Commons sub-view
+  // The Relay is one place holding scenes (Commons/Travelers/Post/Pages/Stations,
+  // REDESIGN §8). relayScene = which scene is open (null = the scene picker);
+  // relaySubCursor = the cursor inside the Post/Pages sub-menu.
+  const [relayScene, setRelayScene] = useState<RelayScene | null>(null);
+  const [relaySubCursor, setRelaySubCursor] = useState(0);
 
   // Your Traveler Page (local-first; per-identity) + the PAGES overlay, plus the
   // peer-to-peer page exchange (serve/fetch over the mesh).
@@ -195,10 +205,14 @@ export function App() {
         via: (n.hops === 0 ? "nearby" : "relay") as "nearby" | "relay",
       })),
   ];
-  const inFriends = identity != null && nav.level === "place" && currentPlace(nav).id === "travelers";
-  const inCommons = identity != null && nav.level === "place" && currentPlace(nav).id === "commons";
+  const inRelay = identity != null && nav.level === "place" && currentPlace(nav).id === "relay";
+  const inFriends = inRelay && relayScene === "travelers";
+  const inCommons = inRelay && relayScene === "commons";
 
-  // Reset the TRAVELERS cursor/thread whenever we enter that place.
+  // Leaving the Relay drops back to its scene picker.
+  useEffect(() => { if (!inRelay) setRelayScene(null); }, [inRelay]);
+
+  // Reset the TRAVELERS cursor/thread whenever we open that scene.
   useEffect(() => {
     if (inFriends) {
       setFriendsCursor(0);
@@ -206,7 +220,7 @@ export function App() {
     }
   }, [inFriends]);
 
-  // Default the Commons to chat each time you enter it.
+  // Default the Commons to chat each time you open it.
   useEffect(() => { if (inCommons) setCommonsPanel("chat"); }, [inCommons]);
 
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
@@ -282,8 +296,7 @@ export function App() {
           if (pageView.cursor === 0) setEditing({ label: "TAGLINE", value: myPage.tagline, onSubmit: setTagline });
           else setEditing({ label: "ABOUT", value: myPage.about, onSubmit: setAbout });
         } else if (action === "cancel") {
-          setPageView(null);
-          navDispatch("cancel");
+          setPageView(null); // back to the Relay's Pages sub-menu
         }
       } else if (pageView.panel === "browse") {
         if (action === "select") {
@@ -296,11 +309,10 @@ export function App() {
             setPageView({ panel: "view", cursor: 0, fp: it.fingerprint });
           }
         } else if (action === "cancel") {
-          setPageView(null);
-          navDispatch("cancel");
+          setPageView(null); // back to the Relay's Pages sub-menu
         }
       } else if (pageView.panel === "guestbook") {
-        if (action === "cancel") { setPageView(null); navDispatch("cancel"); }
+        if (action === "cancel") { setPageView(null); }
       } else { // view someone's page
         if (action === "accept" && pageView.fp) {
           const who = (pageExchange.pages[pageView.fp]?.handle ?? "TRAVELER").toUpperCase();
@@ -338,7 +350,7 @@ export function App() {
         else if (action === "accept") {
           const it = shown[postView.cursor];
           if (it) { postOffice.markRead(it.id); setPostView({ panel: "read", cursor: 0, id: it.id }); }
-        } else if (action === "cancel") { setPostView(null); navDispatch("cancel"); }
+        } else if (action === "cancel") { setPostView(null); }
       } else if (postView.panel === "pick") {
         if (action === "select") setPostView({ panel: "pick", cursor: mailPick.length ? (postView.cursor + 1) % mailPick.length : 0 });
         else if (action === "accept") {
@@ -347,11 +359,11 @@ export function App() {
             label: `MAIL ${it.handle}`.slice(0, 18), value: "",
             onSubmit: (v) => { postOffice.compose(it.fingerprint, it.handle, v); setPostView({ panel: "outbox", cursor: 0 }); },
           });
-        } else if (action === "cancel") { setPostView(null); navDispatch("cancel"); }
+        } else if (action === "cancel") { setPostView(null); }
       } else { // read / outbox — view only
         if (action === "cancel") {
           if (postView.panel === "read") setPostView({ panel: "inbox", cursor: 0 });
-          else { setPostView(null); navDispatch("cancel"); }
+          else { setPostView(null); }
         }
       }
       return;
@@ -386,7 +398,7 @@ export function App() {
           setFriendsThread(it.fingerprint);
         }
       } else if (action === "cancel") {
-        navDispatch("cancel");
+        setRelayScene(null); // back to the Relay's scene picker
       }
       return;
     }
@@ -394,85 +406,97 @@ export function App() {
     // Entering the Wisp Place opens the care/detail surface (home = Wisp; the
     // Place is where you interact with it). DESIGN §6.2/§6.5.
     if (action === "accept" && nav.level === "home" && nav.iconIndex !== null
-        && PLACES[nav.iconIndex].id === "wisp") {
+        && PLACES[nav.iconIndex].id === "home") {
       sfx("accept");
       setWispView({ panel: "care", cursor: 0 });
       navDispatch("accept");
       return;
     }
 
-    // COMMONS: SELECT toggles chat ↔ the Stations list (travel, §6.2); ACCEPT
-    // writes a message (chat panel only).
+    // COMMONS scene: ACCEPT writes a message; CANCEL returns to the Relay's
+    // scene picker. (Stations are now their own Relay scene, §8.)
     if (inCommons) {
-      if (action === "select") { setCommonsPanel((p) => (p === "chat" ? "stations" : "chat")); return; }
       if (action === "accept") {
-        if (commonsPanel === "chat") {
-          sfx("accept");
-          setEditing({ label: "COMMONS", value: "", onSubmit: (v) => social.sendRoom(v) });
-        }
+        sfx("accept");
+        setEditing({ label: "COMMONS", value: "", onSubmit: (v) => social.sendRoom(v) });
         return;
       }
-      if (action === "cancel") { setCommonsPanel("chat"); navDispatch("cancel"); return; }
+      if (action === "cancel") { setRelayScene(null); return; }
+      return; // SELECT inert in the Commons
+    }
+
+    // THE RELAY — scene picker + the Post/Pages sub-menus + Stations (§8). The
+    // Commons/Travelers scenes are handled above; this covers the rest.
+    if (inRelay) {
+      if (relayScene === null) {
+        // Scene picker: ACCEPT opens the scene; SELECT/CANCEL fall through to
+        // the default (cycle the menu / leave the Relay).
+        if (action === "accept") {
+          const scene = RELAY_SCENES[nav.itemIndex];
+          sfx("accept");
+          if (scene === "post" || scene === "pages") setRelaySubCursor(0);
+          setRelayScene(scene);
+          return;
+        }
+      } else if (relayScene === "stations") {
+        if (action === "cancel") setRelayScene(null);
+        return; // the Stations list is view-only for now
+      } else if (relayScene === "post" || relayScene === "pages") {
+        const items = relayScene === "post" ? POST_ITEMS : PAGE_ITEMS;
+        if (action === "select") { setRelaySubCursor((c) => (c + 1) % items.length); return; }
+        if (action === "cancel") { setRelayScene(null); return; }
+        if (action === "accept") {
+          sfx("accept");
+          if (relayScene === "post") {
+            if (relaySubCursor === 0) setPostView({ panel: "inbox", cursor: 0 });
+            else if (relaySubCursor === 1) setPostView({ panel: "pick", cursor: 0 });
+            else setPostView({ panel: "outbox", cursor: 0 });
+          } else {
+            if (relaySubCursor === 0) setPageView({ panel: "mine", cursor: 0 });
+            else if (relaySubCursor === 1) setPageView({ panel: "browse", cursor: 0 });
+            else setPageView({ panel: "guestbook", cursor: 0 });
+          }
+          return;
+        }
+      }
     }
 
     if (action === "accept" && nav.level === "place") {
       const place = currentPlace(nav);
       const item = place.items[nav.itemIndex];
-      if (place.id === "pages" && item === "MY PAGE") {
-        sfx("accept");
-        setPageView({ panel: "mine", cursor: 0 });
-        return;
-      }
-      if (place.id === "pages" && item === "BROWSE") {
-        sfx("accept");
-        setPageView({ panel: "browse", cursor: 0 });
-        return;
-      }
-      if (place.id === "pages" && item === "GUESTBOOK") {
-        sfx("accept");
-        setPageView({ panel: "guestbook", cursor: 0 });
-        return;
-      }
-      if (place.id === "post") {
-        sfx("accept");
-        if (item === "INBOX") setPostView({ panel: "inbox", cursor: 0 });
-        else if (item === "COMPOSE") setPostView({ panel: "pick", cursor: 0 });
-        else if (item === "OUTBOX") setPostView({ panel: "outbox", cursor: 0 });
-        return;
-      }
       if (place.id === "arcade") {
         const s = SAMPLE_CARTS.find((c) => c.name === item);
         if (s) launchCart(s.name, s.code);
         return;
       }
-      if (place.id === "exchange" && item === "CARTS") {
+      if (place.id === "workshop" && item === "CARTS") {
         sfx("accept");
         cartExchange.publish(); // share our Carts while we're here
         setExchangeView({ cursor: 0 });
         return;
       }
-      if (place.id === "profile") {
-        if (item === "RELAY") {
-          // Ambient link control: report status (select) + re-link / drop.
-          sfx("accept");
-          if (link.view.online) void link.disconnect();
-          else void link.connectBoard();
-          navDispatch("accept"); // select so the status report shows
-          return;
-        }
-        if (item === "VAULT") {
-          sfx("accept");
-          setVaultView({ cursor: 0 });
-          return;
-        }
-        if (item === "SETTINGS") {
-          // Real setting: toggle sound. Beep on unmute so you hear it return.
+      if (place.id === "profile" && item === "VAULT") {
+        sfx("accept");
+        setVaultView({ cursor: 0 });
+        return;
+      }
+      if (place.id === "settings") {
+        if (item === "SOUND") {
+          // Toggle sound. Beep on unmute so you hear it return.
           setMutedState((m) => {
             const next = !m;
             if (!next) sfx("accept");
             return next;
           });
           navDispatch("accept"); // select so the toggle state shows
+          return;
+        }
+        if (item === "RELAY") {
+          // Ambient link control: report status (select) + re-link / drop.
+          sfx("accept");
+          if (link.view.online) void link.disconnect();
+          else void link.connectBoard();
+          navDispatch("accept"); // select so the status report shows
           return;
         }
       }
@@ -564,9 +588,11 @@ export function App() {
           : inFriends
             ? "SELECT move · ACCEPT add/open · CANCEL back"
             : inCommons
-              ? commonsPanel === "stations"
-                ? "SELECT chat · CANCEL back"
-                : "SELECT stations · ACCEPT write · CANCEL back"
+              ? "ACCEPT write · CANCEL back"
+              : inRelay && relayScene === "stations"
+                ? "CANCEL back"
+              : inRelay && (relayScene === "post" || relayScene === "pages")
+                ? "SELECT move · ACCEPT open · CANCEL back"
               : "SELECT move · ACCEPT enter · CANCEL back";
 
   return (
@@ -611,7 +637,7 @@ export function App() {
                         : null,
                     }
                   : undefined,
-                chat: nav.level === "place" && currentPlace(nav).id === "commons"
+                chat: inCommons
                   ? {
                       title: "COMMONS",
                       messages: social.roomMsgs.map((m) => ({ mine: m.mine, who: m.handle, text: m.text })),
@@ -620,14 +646,22 @@ export function App() {
                     }
                   : undefined,
                 commonsPanel,
+                relayScene,
+                relaySub: relayScene === "post"
+                  ? { title: "THE POST", items: POST_ITEMS, cursor: relaySubCursor }
+                  : relayScene === "pages"
+                    ? { title: "PAGES", items: PAGE_ITEMS, cursor: relaySubCursor }
+                    : undefined,
+                identityLabel: { handle: identity.handle, fpShort: identity.fingerprint.slice(0, 10).toUpperCase() },
                 stationList: social.stations
                   .filter((s) => Date.now() - s.lastSeen < 300_000)
                   .map((s) => ({ name: s.name, services: s.services, hops: s.hops })),
               }}
               onIcon={(index) => {
                 sfx("accept");
-                // The Wisp icon opens its care surface; others clear both overlays.
-                setWispView(PLACES[index].id === "wisp" ? { panel: "care", cursor: 0 } : null);
+                // The Home icon opens the Wisp's care surface; others clear overlays.
+                setWispView(PLACES[index].id === "home" ? { panel: "care", cursor: 0 } : null);
+                setRelayScene(null);
                 setPageView(null);
                 setPostView(null);
                 setVaultView(null);
