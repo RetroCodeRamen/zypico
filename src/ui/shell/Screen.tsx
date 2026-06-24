@@ -12,9 +12,13 @@ import { BOTTOM_PLACES, TOP_PLACES, type PlaceDef } from "./nav.ts";
 export function Screen({
   model,
   onIcon,
+  fps = 8,
 }: {
   model: ScreenModel;
   onIcon: (index: number) => void;
+  /** Matrix refresh rate; bumped for the Relay carousel slide (the Wisp, whose
+   *  frame-based wander assumes 8 fps, isn't on screen then). */
+  fps?: number;
 }) {
   const renderIcon = (place: PlaceDef, index: number) => (
     <button
@@ -33,7 +37,7 @@ export function Screen({
     <div className="lcd">
       <div className="icon-row top">{TOP_PLACES.map((p, i) => renderIcon(p, i))}</div>
       <div className="matrix">
-        <PixelScreen draw={(buf, frame) => drawScreen(buf, frame, model)} fps={8} />
+        <PixelScreen draw={(buf, frame) => drawScreen(buf, frame, model)} fps={fps} />
       </div>
       <div className="icon-row bottom">{BOTTOM_PLACES.map((p, i) => renderIcon(p, i + 4))}</div>
     </div>

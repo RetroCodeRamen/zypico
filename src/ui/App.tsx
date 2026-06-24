@@ -94,6 +94,7 @@ export function App() {
   // relaySubCursor = the cursor inside the Post/Pages sub-menu.
   const [relayScene, setRelayScene] = useState<RelayScene | null>(null);
   const [relaySubCursor, setRelaySubCursor] = useState(0);
+  const [relaySlideAt, setRelaySlideAt] = useState(0); // last carousel advance (drives the slide)
 
   // Your Traveler Page (local-first; per-identity) + the PAGES overlay, plus the
   // peer-to-peer page exchange (serve/fetch over the mesh).
@@ -429,8 +430,10 @@ export function App() {
     // Commons/Travelers scenes are handled above; this covers the rest.
     if (inRelay) {
       if (relayScene === null) {
-        // Scene picker: ACCEPT opens the scene; SELECT/CANCEL fall through to
-        // the default (cycle the menu / leave the Relay).
+        // Scene picker (carousel): ACCEPT opens the scene; SELECT advances the
+        // carousel (record the moment so the renderer animates the slide), then
+        // falls through to the default to actually move the cursor; CANCEL falls
+        // through to leave the Relay.
         if (action === "accept") {
           const scene = RELAY_SCENES[nav.itemIndex];
           sfx("accept");
@@ -438,6 +441,7 @@ export function App() {
           setRelayScene(scene);
           return;
         }
+        if (action === "select") setRelaySlideAt(Date.now()); // then fall through to navDispatch
       } else if (relayScene === "stations") {
         if (action === "cancel") setRelayScene(null);
         return; // the Stations list is view-only for now
@@ -614,6 +618,7 @@ export function App() {
             </div>
           ) : identity ? (
             <Screen
+              fps={inRelay && relayScene === null ? 16 : 8}
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
@@ -647,6 +652,7 @@ export function App() {
                   : undefined,
                 commonsPanel,
                 relayScene,
+                relaySlideAt,
                 relaySub: relayScene === "post"
                   ? { title: "THE POST", items: POST_ITEMS, cursor: relaySubCursor }
                   : relayScene === "pages"
