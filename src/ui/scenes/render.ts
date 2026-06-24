@@ -19,6 +19,7 @@ import {
   TIER_NAMES,
   wispAgeDays,
   wispForm,
+  type Care,
   type MoodState,
   type Wisp,
 } from "@core/companion/index.ts";
@@ -71,11 +72,19 @@ export interface EditView {
 
 /** The WISP Place. `care` = actions + reactions (front); `stats` = hearts;
  * `journal` = "what I saw" (the Wisp's discoveries). */
-export interface WispView {
-  panel: "care" | "stats" | "journal";
-  /** Highlighted action in the care panel (the action list, see CARE_ACTIONS). */
-  cursor: number;
-}
+export type WispView =
+  | {
+      panel: "care" | "stats" | "journal";
+      /** Highlighted action in the care panel (the action list, see CARE_ACTIONS). */
+      cursor: number;
+    }
+  | {
+      /** A care verb playing its short animated sequence in the room (REDESIGN §4). */
+      panel: "act";
+      cursor: number; // the care-panel cursor to return to
+      care: Care;
+      startedAt: number; // epoch ms the sequence began (drives the animation + apply)
+    };
 
 /** The PAGES place overlay. `mine` = edit your Traveler Page (cursor: 0 tagline,
  * 1 about); `browse` = pick a reachable Traveler; `view` = read their page. */
@@ -572,6 +581,89 @@ export function drawWispCare(
     const isReset = label === "RESET";
     drawText(buf, x + 6, y, label, hi ? (isReset ? C.warn : C.textHi) : isReset ? C.dim : C.text);
   });
+}
+
+/** How long a care sequence plays before the effect lands (App + renderer share). */
+export const CARE_ANIM_MS = 1500;
+
+// A short, skippable, locally-rendered care sequence in the room (REDESIGN §4):
+// the player never just watches a number — each verb has the Wisp react.
+export function drawWispAct(
+  buf: PixelBuffer,
+  frame: number,
+  wisp: Wisp,
+  care: Care,
+  startedAt: number,
+  mood: MoodSummary,
+): void {
+  buf.clear(C.bg);
+  const state = MOOD_STATE_DEFS[mood.state];
+  drawText(buf, 3, 2, CARE_DEFS[care].label, C.title);
+  drawText(buf, buf.width - measureText(state.label) - 3, 2, state.label, state.color);
+  divider(buf, 9);
+
+  const p = Math.min(1, Math.max(0, (Date.now() - startedAt) / CARE_ANIM_MS));
+  const form = wispForm(wisp);
+  const tinted = { ...form, color: state.color };
+  const cx = 64;
+  const cy = 40;
+  const pi = Math.PI;
+
+  if (care === "feed") {
+    const bowlY = 60;
+    buf.fillRect(cx - 9, bowlY, 18, 3, 4); // bowl
+    buf.fillRect(cx - 7, bowlY - 2, Math.round(14 * Math.max(0, 1 - p * 1.3)), 2, 9); // food shrinks
+    const lean = Math.sin(p * pi) * 8;
+    drawWisp(buf, cx, cy - 4 + lean, frame, tinted, 0.85);
+    if (p > 0.65) drawText(buf, cx + 11, cy - 12 - Math.round((p - 0.65) * 26), "<3", 14);
+    if (frame % 6 < 3) buf.set(cx - 6 + (frame % 14), bowlY - 1, 9); // crumbs
+  } else if (care === "treat") {
+    if (p < 0.35) buf.fillRect(cx - 4, 16 + Math.round(p * 30), 8, 6, 14); // dropping treat
+    const hop = -Math.abs(Math.sin(p * pi * 2)) * 14;
+    drawWisp(buf, cx, cy + hop, frame, tinted, 0.9);
+    if (p > 0.3) {
+      for (let i = 0; i < 10; i++) { // confetti
+        const a = (i / 10) * pi * 2 + frame * 0.3;
+        buf.set(cx + Math.round(Math.cos(a) * (8 + p * 22)), cy + Math.round(Math.sin(a) * (6 + p * 16)), 8 + (i % 7));
+      }
+    }
+  } else if (care === "clean") {
+    const wig = Math.round(Math.sin(p * pi * 6) * 3);
+    drawWisp(buf, cx + wig, cy, frame, { ...form, color: 12 }, 0.85);
+    for (let i = 0; i < 8; i++) { // rising bubbles
+      const by = cy + 14 - ((frame * 2 + i * 13) % 46);
+      buf.circle(cx + (i * 11 - 38), by, i % 2 ? 2 : 1, 7);
+    }
+    const sx = Math.round(p * buf.width); // a sparkle sweep
+    for (let y = 12; y < 64; y += 6) buf.set(sx, y + (frame % 3), 7);
+  } else if (care === "rest") {
+    const dim = p < 0.72 ? 5 : state.color; // dozes, then wakes brighter
+    drawWisp(buf, cx, cy + 4, frame, { ...form, color: dim }, 0.85);
+    "ZZZ".split("").forEach((z, i) => {
+      const t = (frame + i * 9) % 40;
+      if (t < 30) drawText(buf, cx + 12 + i * 4, cy - 8 - i * 4 - Math.round(t * 0.3), z, C.dim);
+    });
+  } else if (care === "talk") {
+    drawWisp(buf, cx - 22, cy, frame, tinted, 0.78);
+    if (p > 0.2) {
+      const line = state.lines[Math.floor(startedAt / 1000) % state.lines.length];
+      const w = measureText(line) + 6;
+      const bx = cx - 8;
+      const by = 22;
+      buf.fillRect(bx, by, w, 13, 7); // speech bubble
+      buf.set(bx - 1, by + 9, 7); buf.set(bx - 2, by + 11, 7); // tail
+      drawText(buf, bx + 3, by + 4, line, 0);
+    }
+  } else { // play — chases a little ball
+    const bx = cx + Math.round(Math.sin(p * pi * 3) * 28);
+    const by = cy - 8 - Math.round(Math.abs(Math.sin(p * pi * 5)) * 16);
+    buf.fillCircle(bx, by, 2, 10);
+    const hop = -Math.abs(Math.sin(p * pi * 4)) * 11;
+    drawWisp(buf, cx - 12, cy + hop, frame, tinted, 0.85);
+  }
+
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, p < 1 ? "ANY BUTTON TO SKIP" : "...", C.dim);
 }
 
 /** The WISP stats panel: the creature, its form, age, and the five hearts. */
@@ -1190,9 +1282,11 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     return;
   }
   if (model.wispView) {
-    if (model.wispView.panel === "stats") drawWispStats(buf, frame, model.wisp);
-    else if (model.wispView.panel === "journal") drawWispJournal(buf, model.discoveries, Date.now());
-    else drawWispCare(buf, frame, model.wisp, model.wispView, model.wispMood, model.canRaise);
+    const wv = model.wispView;
+    if (wv.panel === "stats") drawWispStats(buf, frame, model.wisp);
+    else if (wv.panel === "journal") drawWispJournal(buf, model.discoveries, Date.now());
+    else if (wv.panel === "act") drawWispAct(buf, frame, model.wisp, wv.care, wv.startedAt, model.wispMood);
+    else drawWispCare(buf, frame, model.wisp, wv, model.wispMood, model.canRaise);
     return;
   }
   if (model.pageView) {

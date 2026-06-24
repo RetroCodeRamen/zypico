@@ -4,14 +4,14 @@ import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
 import { Keyboard } from "@ui/shell/Keyboard.tsx";
 import { currentPlace, INITIAL_NAV, navReduce, PLACES, RELAY_SCENES, type RelayScene } from "@ui/shell/nav.ts";
-import { careActionCount, drawCartError, drawErrorBanner, drawLogin, drawSplash } from "@ui/scenes/render.ts";
+import { CARE_ANIM_MS, careActionCount, drawCartError, drawErrorBanner, drawLogin, drawSplash } from "@ui/scenes/render.ts";
 import {
   CART_TEMPLATE, caretDown, caretLeft, caretRight, caretUp, cleanName, deleteBack, insertAt,
   WORKSHOP_MENU, type WorkshopView,
 } from "@ui/workshop/editor.ts";
 import type { EditView, ExchangeView, MoodSummary, PageView, PostView, VaultView } from "@ui/scenes/render.ts";
 import {
-  applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm,
+  applyCare, CARES, createWisp, formWireIndex, moodState, renameWisp, settleMood, wispForm, type Care,
 } from "@core/companion/index.ts";
 import { PLACE_HOME } from "@core/protocol/social.ts";
 import { SERVICE } from "@core/protocol/index.ts";
@@ -265,6 +265,23 @@ export function App() {
   // Default the Commons to chat each time you open it.
   useEffect(() => { if (inCommons) setCommonsPanel("chat"); }, [inCommons]);
 
+  // Land a care verb's effect on the Mood, then return to the care panel. Shared
+  // by the natural end of the animation and an early skip.
+  const finishCare = (care: Care, cursor: number) => {
+    setWisp((w) => ({ ...w, mood: applyCare(w.mood, care) }));
+    setWispView({ panel: "care", cursor });
+  };
+
+  // While a care sequence plays, apply its effect when the animation ends. A skip
+  // changes wispView, which clears this timer (so the effect lands exactly once).
+  useEffect(() => {
+    if (wispView?.panel !== "act") return;
+    const { care, cursor } = wispView;
+    const t = setTimeout(() => finishCare(care, cursor), CARE_ANIM_MS);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wispView?.panel === "act" ? wispView.startedAt : null]);
+
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
   const handleButton = (action: ButtonAction) => {
     if (splash) { dismissSplash(); return; }
@@ -352,14 +369,21 @@ export function App() {
         if (action === "cancel") setWispView({ panel: "care", cursor: 0 });
         return;
       }
+      // A care sequence is playing — any button skips to the end (the effect
+      // lands now; the pending timer is cleared as wispView changes).
+      if (wispView.panel === "act") {
+        finishCare(wispView.care, wispView.cursor);
+        return;
+      }
       const count = careActionCount(CAN_RAISE);
       if (action === "select") {
         setWispView({ panel: "care", cursor: (wispView.cursor + 1) % count });
       } else if (action === "accept") {
         const i = wispView.cursor;
         if (i < CARES.length) {
-          setWisp((w) => ({ ...w, mood: applyCare(w.mood, CARES[i]) }));
-          sfx("feed"); // a soft, happy reaction
+          // Play the care verb's animated sequence; the effect lands when it ends.
+          sfx(CARES[i] === "rest" ? "select" : "feed");
+          setWispView({ panel: "act", cursor: i, care: CARES[i], startedAt: Date.now() });
         } else if (i === CARES.length) { // RENAME
           sfx("accept");
           setEditing({
@@ -699,9 +723,11 @@ export function App() {
               ? "CANCEL back"
               : "SELECT move · ACCEPT open · CANCEL back"
       : wispView
-        ? wispView.panel === "stats"
-          ? "CANCEL back to care"
-          : "SELECT move · ACCEPT do · CANCEL back"
+        ? wispView.panel === "act"
+          ? "ANY BUTTON TO SKIP"
+          : wispView.panel === "stats" || wispView.panel === "journal"
+            ? "CANCEL back to care"
+            : "SELECT move · ACCEPT do · CANCEL back"
         : pageView
           ? pageView.panel === "view"
             ? "ACCEPT sign · CANCEL back"
@@ -751,7 +777,7 @@ export function App() {
             </div>
           ) : identity ? (
             <Screen
-              fps={(inRelay && relayScene === null) || inArcade ? 16 : 8}
+              fps={(inRelay && relayScene === null) || inArcade || wispView?.panel === "act" ? 16 : 8}
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
