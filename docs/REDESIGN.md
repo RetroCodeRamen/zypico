@@ -22,9 +22,9 @@ navigation, status, and quiet notifications — physical controls around a tiny 
 
 ## 1. Revised top-level navigation (information architecture)
 
-The current eight flat icons split related things apart (comms across Commons /
-Travelers / Post / Stations; making across Arcade / Exchange / Lua). Regroup into
-**five destinations + Home**, organized by what the user wants to *do*:
+The old eight flat icons split related things apart (comms across Commons /
+Travelers / Post / Stations; making across Arcade / Exchange / Lua). Regroup —
+still **eight icons**, but grouped by *meaning*, not by backend service:
 
 | Destination | Holds | "I want to…" |
 |---|---|---|
@@ -32,7 +32,10 @@ Travelers / Post / Stations; making across Arcade / Exchange / Lua). Regroup int
 | **The Relay** | The explorable social region: **Commons** (talk publicly), **Travelers** (who's nearby · message a Traveler · DMs), **The Post** (delayed messages / Mail), **Stations** (visit), **Pages** directory (visit a Page), exploration/map | talk, message, read mail, see who's nearby, visit a Station, explore, visit a Page |
 | **Arcade** | Play: Wisp **minigames**, Wisp **battles** (vs Travelers), and **Carts** to run | play a game |
 | **Workshop** (the Lab) | Create: the **Lua editor**, your Carts (author / edit / share), the **Exchange** (download/trade Carts), your **Page** editor | create a Cart, trade/download a Cart, edit my page |
-| **Profile** | Identity, settings, **Vault** backup, device/relay status | change device or identity settings |
+| **Bag** | Your **items + collection**: treats, toys, decorations, badges, Page stamps, Station souvenirs, gifts — and their *uses* | see/use my stuff, equip, decorate, gift |
+| **Profile** | *Who you are*: identity, **Vault** backup | manage my identity / back up |
+| **Settings** | *System*: sound on/off, region/LoRa, notifications, reduced-motion, display, relay/device status | change device settings |
+| **Alerts** | The attention light + a list of what needs you (messages, battle invites, Wisp needs), jumping to the right place | know when something needs me |
 
 Pages are reached **inside the Relay** (a directory) and from a Traveler ("view
 page") rather than as a top icon. Mail/DMs/Commons/Stations all live under the
@@ -41,6 +44,24 @@ page") rather than as a top icon. Mail/DMs/Commons/Stations all live under the
 Rationale: this maps 1:1 to the user's intent list, hides transport/runtime
 details (LoRa, wasmoon, store-and-forward), and turns "open an app" into "go
 somewhere." Home is a *room*, not a launcher.
+
+### Alerts — the Tamagotchi attention light
+
+Borrowed straight from a Tamagotchi's "your pet is calling you" icon. The **Alerts**
+icon is dark/quiet until something needs you, then **lights up in its hue + a soft
+beep** (the board's OLED can blink too). Triggers: a new **DM**, new **Mail**, a
+**guestbook reply**, a **battle invite**, a **Station event**, or the **Wisp
+needing care**. Selecting it opens a tiny **alerts list** ("BYTEBUG SENT A DM",
+"WISP IS HUNGRY", "BATTLE INVITE") and **jumps to the right place**; clearing turns
+the light off. This keeps unread state on *one* dedicated indicator instead of a
+swarm of badge counts across every icon.
+
+### Settings (top-level)
+
+Split out from Profile so system config is its own place: **sound on/off**,
+**LoRa region/params**, **notification** preferences (which events light Alerts),
+**reduced-motion**, display/contrast, and **relay/device status** (connection,
+node id, reconnect). Profile keeps just *who you are* — identity + Vault.
 
 ### Recommended navigation approach
 
@@ -67,15 +88,18 @@ world by looking at the room, and a power user uses the rail.
 ## 2. Icon & visual-navigation system
 
 A coherent icon language for the **frame rail** (and the room's gateway objects
-echo the same silhouettes):
+echo the same silhouettes). Fixed slot order — **Alerts is always the last slot**:
 
-| Destination | Silhouette | Dominant color (PICO-8) | Room gateway object |
-|---|---|---|---|
-| Home | a little house / the Wisp itself | warm yellow (10) | (you are here) |
-| The Relay | radio tower with broadcast arcs | blue (12) | a **radio** on a shelf |
-| Arcade | arcade cabinet / joystick | red (8) | a small **cabinet** |
-| Workshop | wrench-over-bracket / workbench | lavender (13) | a **workbench/terminal** |
-| Profile | head-and-shoulders / gear | grey (6) | a **mirror / gear** by the door |
+| # | Destination | Silhouette | Dominant color (PICO-8) | Room gateway object |
+|---|---|---|---|---|
+| 1 | Home | a little house / the Wisp itself | warm yellow (10) | (you are here) |
+| 2 | The Relay | radio tower with broadcast arcs | blue (12) | a **radio** on a shelf |
+| 3 | Arcade | arcade cabinet / joystick | red (8) | a small **cabinet** |
+| 4 | Workshop | wrench-over-bracket / workbench | lavender (13) | a **workbench/terminal** |
+| 5 | Bag | a satchel / pouch | green (11) | a **travel bag** by the door |
+| 6 | Profile | head-and-shoulders | peach (15) | a **mirror** |
+| 7 | Settings | gear | grey (6) | a **gear/knob** on the wall |
+| 8 | **Alerts** _(last slot)_ | a bell / signal-burst that **lights up** | orange (9) when active, dim when quiet | the Wisp itself "calls" you |
 
 Icon rules:
 - Single-color, single-weight stroke; identity from **silhouette + position +
@@ -83,9 +107,10 @@ Icon rules:
 - Crisp on the hi-res frame (vector), framing the chunky 128×80 world — the
   alternate-2002 handheld look, not smartphone icons.
 - **Selected** destination: filled/glowing in its hue with a bracket; others dim.
-- **Unread activity:** a single small dot in the destination's hue on its icon
-  (e.g., Relay dot = new Commons/DM/Mail). One dot max per icon — never a count
-  swarm; the detail lives inside.
+- **Attention** is centralized on the **Alerts** icon (last slot), which lights up
+  + beeps — the one place unread/needs-you state lives, so the rail never becomes
+  a swarm of badge counts. (A destination may show at most a single quiet dot if
+  ever needed, but Alerts is the primary indicator.)
 
 ---
 
@@ -464,8 +489,10 @@ is merely *faster* on the T-Deck.
 ## 14. Launch version vs later expansion
 
 **Launch (v1 of the redesign) — reorganize + make it alive:**
-- New IA (Home room + Relay/Arcade/Workshop/Profile) + frame rail + diegetic
-  gateways + **hold-CANCEL Home**.
+- New IA (Home room + the 8 icons: Relay/Arcade/Workshop/Bag/Profile/Settings/
+  **Alerts** last) + frame rail + diegetic gateways + **hold-CANCEL Home**.
+- **Alerts** attention light (DM/Mail/guestbook/battle-invite/Wisp-needs) + alerts
+  list that jumps to the source; **Settings** split from Profile.
 - Splash = title screen that waits for input (shipped now, §below).
 - Animated Feed/Treat/Clean/Rest/Talk in the room (real sequences).
 - Three Wisp minigames (Snackfall, Echo, Bounce).
