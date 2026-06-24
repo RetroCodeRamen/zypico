@@ -1,6 +1,8 @@
-import { useRef, useState } from "react";
-import { deriveIdentity, type Identity } from "@core/identity/index.ts";
+import { useEffect, useRef, useState } from "react";
+import { deriveIdentity, identityFromSeed, type Identity } from "@core/identity/index.ts";
 import { clearStoredIdentity, loadStoredIdentity, saveStoredIdentity } from "@app/storage/identity.ts";
+import { clearSession, fetchSessionId, loadSession, saveSession, staySignedIn } from "@app/storage/session.ts";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import type { LoginView } from "@ui/scenes/render.ts";
 import type { ButtonAction } from "@ui/shell/Buttons.tsx";
 import { sfx } from "@ui/sound.ts";
@@ -22,6 +24,31 @@ export function useIdentity(onAuthenticated: (id: Identity) => void) {
       busy: false,
     };
   });
+
+  // Restore a saved session on boot — but only if the board's session id still
+  // matches (same boot + same WiFi connection). A page reload hits this and logs
+  // straight in; a board reboot or WiFi reconnect makes the id mismatch → we drop
+  // the saved session and fall back to the login screen. Skips the slow Argon2.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const sess = loadSession();
+      if (!sess || !staySignedIn()) return;
+      const current = await fetchSessionId();
+      if (cancelled) return;
+      if (!current || current !== sess.sessionId) { clearSession(); return; }
+      try {
+        const id = identityFromSeed(sess.handle, hexToBytes(sess.seed));
+        if (id.fingerprint !== sess.fingerprint) { clearSession(); return; }
+        onAuthenticated(id);
+        setIdentity(id);
+      } catch {
+        clearSession();
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const loginType = (ch: string) => {
     sfx("type");
@@ -55,6 +82,11 @@ export function useIdentity(onAuthenticated: (id: Identity) => void) {
       setIdentity(id);
       setLogin((l) => ({ ...l, busy: false, password: "" }));
       sfx("connect");
+      // Remember this login for reloads, bound to the board's current session id.
+      if (staySignedIn()) {
+        const sessionId = await fetchSessionId();
+        if (sessionId) saveSession({ handle: id.handle, fingerprint: id.fingerprint, seed: bytesToHex(id.secretKey), sessionId });
+      }
     } catch {
       setLogin((l) => ({ ...l, busy: false, error: "LOGIN FAILED" }));
       sfx("error");
@@ -74,8 +106,9 @@ export function useIdentity(onAuthenticated: (id: Identity) => void) {
     } else if (action === "cancel") {
       sfx("cancel");
       if (login.mode === "login") {
-        // Switch traveler: forget the stored identity and create a new one.
+        // Switch traveler: forget the stored identity + session and start fresh.
         clearStoredIdentity();
+        clearSession();
         storedRef.current = null;
         setLogin({ mode: "create", handle: "", password: "", field: "handle", busy: false });
       } else {
@@ -84,5 +117,15 @@ export function useIdentity(onAuthenticated: (id: Identity) => void) {
     }
   };
 
-  return { identity, login, loginType, loginBackspace, handleButton };
+  // Save the current login as a session now (e.g. when STAY SIGNED IN is turned
+  // back on mid-session), bound to the board's current session id.
+  const rememberCurrent = () => {
+    if (!identity) return;
+    void (async () => {
+      const sessionId = await fetchSessionId();
+      if (sessionId) saveSession({ handle: identity.handle, fingerprint: identity.fingerprint, seed: bytesToHex(identity.secretKey), sessionId });
+    })();
+  };
+
+  return { identity, login, loginType, loginBackspace, handleButton, rememberCurrent };
 }

@@ -230,6 +230,8 @@ export interface ScreenModel {
   identityLabel?: { handle: string; fpShort: string };
   /** Whether the on-screen keyboard is shown (SETTINGS → KEYBOARD). */
   keyboardEnabled?: boolean;
+  /** Whether the login persists across reloads (SETTINGS → STAY SIGNED IN). */
+  staySignedIn?: boolean;
   /** The Workshop overlay (Lua editor), when open. */
   workshop?: WorkshopView | null;
   /** Names of your authored carts (WORKSHOP → MY CARTS list). */
@@ -471,6 +473,7 @@ export function drawSettings(
   relay: RelayView,
   muted: boolean,
   keyboardEnabled: boolean,
+  staySignedIn: boolean,
 ): void {
   buf.clear(C.bg);
   drawText(buf, 3, 2, place.label, C.title);
@@ -487,6 +490,9 @@ export function drawSettings(
   } else if (item === "KEYBOARD") {
     drawTextCentered(buf, 49, keyboardEnabled ? "KEYBOARD: ON" : "KEYBOARD: OFF", keyboardEnabled ? C.ok : C.dim);
     drawTextCentered(buf, 57, keyboardEnabled ? "ACCEPT: HIDE FOR BIG SCREEN" : "ACCEPT TO SHOW", C.dim);
+  } else if (item === "STAY SIGNED IN") {
+    drawTextCentered(buf, 49, staySignedIn ? "STAY SIGNED IN: ON" : "STAY SIGNED IN: OFF", staySignedIn ? C.ok : C.dim);
+    drawTextCentered(buf, 57, staySignedIn ? "REMEMBERS YOU ON RELOAD" : "ACCEPT TO TOGGLE", C.dim);
   } else if (item === "RELAY") {
     drawTextCentered(buf, 49, relay.statusLabel, relay.online ? C.ok : relay.detail ? C.warn : C.dim);
     if (relay.online) {
@@ -1338,6 +1344,6 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   if (place.id === "arcade") drawCarousel(buf, "ARCADE", "", ARCADE_CARDS, nav.itemIndex, model.carouselSlideAt ?? 0);
   else if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
-  else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted, model.keyboardEnabled ?? true);
+  else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted, model.keyboardEnabled ?? true, model.staySignedIn ?? true);
   else drawPlace(buf, place, nav);
 }

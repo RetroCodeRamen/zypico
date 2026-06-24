@@ -72,6 +72,14 @@ static uint16_t txSeq = 0;
 static char apSsid[24]; // unique per board so two boards are distinguishable
 static volatile bool rxFlag = false;
 
+// Per-connection session id: lets the browser keep a login across page reloads
+// (same id) but drop it when the board reboots (fresh id) or the WiFi client
+// leaves and rejoins (rotated on AP disconnect). Served at GET /session.
+static char sessionId[17];
+static void regenSession() {
+  snprintf(sessionId, sizeof(sessionId), "%08X%08X", (unsigned)esp_random(), (unsigned)esp_random());
+}
+
 // OLED view: the logo splash stays up until the USER button switches to info.
 static bool showInfo = false;
 
@@ -154,6 +162,9 @@ void setup() {
   // WiFi access point — fully offline, no router/internet. Open network
   // "ZyPico", limited to ONE connected device (max_connection = 1).
   WiFi.mode(WIFI_AP);
+  regenSession(); // fresh session each boot
+  // Rotate the session when the WiFi client leaves, so a reconnect re-logs-in.
+  WiFi.onEvent([](WiFiEvent_t, WiFiEventInfo_t) { regenSession(); }, ARDUINO_EVENT_WIFI_AP_STADISCONNECTED);
   bool apok = WiFi.softAP(apSsid, nullptr, 1 /*channel*/, 0 /*hidden*/, 1 /*max_connection*/);
   IPAddress apIP = WiFi.softAPIP();
   Serial.printf("softAP=%d  IP=%s\n", apok, apIP.toString().c_str());
@@ -184,6 +195,12 @@ void setup() {
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
+  // The current session id (registered before serveStatic so it isn't shadowed).
+  server.on("/session", HTTP_GET, [](AsyncWebServerRequest *req) {
+    AsyncWebServerResponse *res = req->beginResponse(200, "text/plain", sessionId);
+    res->addHeader("Cache-Control", "no-store");
+    req->send(res);
+  });
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
   // SPA + captive fallback: any unknown host/path (incl. OS connectivity probes)
   // gets the app, so the phone's captive sign-in opens ZyPico instead of warning.

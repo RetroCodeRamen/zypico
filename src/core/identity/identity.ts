@@ -37,9 +37,15 @@ export async function deriveIdentity(handle: string, password: string): Promise<
   // yields different identities, without needing a stored random salt.
   const salt = sha256(utf8("zypico-id:" + h.toLowerCase()));
   const seed = await argon2idAsync(utf8(password), salt, ARGON);
+  return identityFromSeed(h, seed);
+}
+
+/** Rebuild an Identity from its 32-byte seed — for restoring a saved session
+ *  without re-running the (slow) password derivation. The seed *is* the secret. */
+export function identityFromSeed(handle: string, seed: Uint8Array): Identity {
   const publicKey = ed25519.getPublicKey(seed);
   const fingerprint = bytesToHex(sha256(publicKey)).slice(0, 12);
-  return { handle: h, fingerprint, publicKey, secretKey: seed };
+  return { handle: handle.trim(), fingerprint, publicKey, secretKey: seed };
 }
 
 /** Sign bytes with the identity (for signed beacons/posts/lineage, Phase 2+). */

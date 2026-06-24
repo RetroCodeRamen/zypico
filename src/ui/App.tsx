@@ -20,6 +20,7 @@ import { cartBeep, sfx } from "@ui/sound.ts";
 import { useViewportScale } from "@ui/hooks/useViewportScale.ts";
 import { useMuted } from "@ui/hooks/useMuted.ts";
 import { useKeyboardEnabled } from "@ui/hooks/useKeyboardEnabled.ts";
+import { useStaySignedIn } from "@ui/hooks/useStaySignedIn.ts";
 import { useCompanion } from "@ui/hooks/useCompanion.ts";
 import { useRelay } from "@ui/hooks/useRelay.ts";
 import { useSocial } from "@ui/hooks/useSocial.ts";
@@ -77,7 +78,7 @@ export function App() {
   // On login we load per-identity state and bring the link up; that wiring lives
   // below the dependent hooks, so the callback is reached through a ref.
   const postAuthRef = useRef<(id: Identity) => void>(() => {});
-  const { identity, login, loginType, loginBackspace, handleButton: handleLoginButton } =
+  const { identity, login, loginType, loginBackspace, handleButton: handleLoginButton, rememberCurrent } =
     useIdentity((id) => postAuthRef.current(id));
 
   // The companion (local-first; per-identity). Autosaves under the fingerprint.
@@ -196,6 +197,10 @@ export function App() {
   // On-screen keyboard on/off (persisted). Off hides it so the screen + buttons
   // fill the viewport on small handhelds (typing then uses a hardware keyboard).
   const [keyboardEnabled, setKeyboardEnabled] = useKeyboardEnabled();
+
+  // Keep the login across page reloads (persisted; default on). See useIdentity
+  // for the restore + the board session-id gating.
+  const [staySignedIn, setStaySignedInState] = useStaySignedIn();
 
   // Scale-to-fit: laid out at true design size, scaled by one uniform factor.
   const { stageRef, deviceRef, scale } = useViewportScale();
@@ -630,6 +635,16 @@ export function App() {
           navDispatch("accept"); // select so the toggle state shows
           return;
         }
+        if (item === "STAY SIGNED IN") {
+          // Toggle persisting the login across reloads (off clears any saved
+          // session; on re-remembers the current login right away).
+          sfx("accept");
+          const next = !staySignedIn;
+          setStaySignedInState(next);
+          if (next) rememberCurrent();
+          navDispatch("accept"); // select so the toggle state shows
+          return;
+        }
         if (item === "RELAY") {
           // Ambient link control: report status (select) + re-link / drop.
           sfx("accept");
@@ -819,6 +834,7 @@ export function App() {
                     : undefined,
                 identityLabel: { handle: identity.handle, fpShort: identity.fingerprint.slice(0, 10).toUpperCase() },
                 keyboardEnabled,
+                staySignedIn,
                 workshop,
                 myCartNames: myCarts.map((c) => c.name),
                 stationList: social.stations

@@ -43,7 +43,7 @@ export const PLACES: PlaceDef[] = [
   { id: "workshop", label: "WORKSHOP", scope: "local", items: ["MY CARTS", "EXCHANGE"] },
   { id: "bag", label: "BAG", scope: "local", items: ["ITEMS"] },
   { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "VAULT"] },
-  { id: "settings", label: "SETTINGS", scope: "local", items: ["SOUND", "KEYBOARD", "RELAY"] },
+  { id: "settings", label: "SETTINGS", scope: "local", items: ["SOUND", "KEYBOARD", "STAY SIGNED IN", "RELAY"] },
   { id: "alerts", label: "ALERTS", scope: "local", items: ["NONE"] },
 ];
 
