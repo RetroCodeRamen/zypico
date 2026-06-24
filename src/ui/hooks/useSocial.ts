@@ -123,6 +123,7 @@ export function useSocial(
         onActivity("journey", 2); // discovering the world grows Journey
         // The Wisp notices the passing Traveler and remembers it (DESIGN §2).
         setDiscoveries((prev) => addDiscovery(prev, { kind: "traveler", name: p.handle, at: Date.now() }));
+        echoPresence(); // wave back so they discover us too (mutual discovery)
       }
     } else if (f.subtype === SubType.IM) {
       const env = decodeDM(f.payload);
@@ -160,6 +161,19 @@ export function useSocial(
       const meta = metaRef.current();
       link.send(SubType.PRESENCE, encodePresence(me, meta.formIndex, meta.placeId));
     }
+  };
+
+  // Mutual discovery: a presence beacon is one-shot, so the first traveler online
+  // beacons before anyone is listening and stays invisible until the next 60 s
+  // tick — the "whoever signs in last can talk" bug. When we hear someone NEW we
+  // echo our own presence (jittered so beacons don't collide, debounced so a room
+  // full of arrivals can't trigger a storm), closing discovery to one round-trip.
+  const lastEchoRef = useRef(0);
+  const echoPresence = () => {
+    const now = Date.now();
+    if (now - lastEchoRef.current < 3000) return; // at most one echo per few seconds
+    lastEchoRef.current = now;
+    setTimeout(broadcastPresence, 100 + Math.floor(Math.random() * 500));
   };
 
   // Announce presence on connect and periodically, so others discover us.
