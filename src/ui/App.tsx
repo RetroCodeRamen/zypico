@@ -94,7 +94,7 @@ export function App() {
   // relaySubCursor = the cursor inside the Post/Pages sub-menu.
   const [relayScene, setRelayScene] = useState<RelayScene | null>(null);
   const [relaySubCursor, setRelaySubCursor] = useState(0);
-  const [relaySlideAt, setRelaySlideAt] = useState(0); // last carousel advance (drives the slide)
+  const [carouselSlideAt, setCarouselSlideAt] = useState(0); // last carousel advance (Relay/Arcade slide)
 
   // Your Traveler Page (local-first; per-identity) + the PAGES overlay, plus the
   // peer-to-peer page exchange (serve/fetch over the mesh).
@@ -207,6 +207,7 @@ export function App() {
       })),
   ];
   const inRelay = identity != null && nav.level === "place" && currentPlace(nav).id === "relay";
+  const inArcade = identity != null && nav.level === "place" && currentPlace(nav).id === "arcade";
   const inFriends = inRelay && relayScene === "travelers";
   const inCommons = inRelay && relayScene === "commons";
 
@@ -441,7 +442,7 @@ export function App() {
           setRelayScene(scene);
           return;
         }
-        if (action === "select") setRelaySlideAt(Date.now()); // then fall through to navDispatch
+        if (action === "select") setCarouselSlideAt(Date.now()); // then fall through to navDispatch
       } else if (relayScene === "stations") {
         if (action === "cancel") setRelayScene(null);
         return; // the Stations list is view-only for now
@@ -464,6 +465,10 @@ export function App() {
         }
       }
     }
+
+    // The Arcade is a carousel too: a SELECT records the slide moment, then
+    // falls through to cycle the cursor.
+    if (inArcade && action === "select") setCarouselSlideAt(Date.now());
 
     if (action === "accept" && nav.level === "place") {
       const place = currentPlace(nav);
@@ -618,7 +623,7 @@ export function App() {
             </div>
           ) : identity ? (
             <Screen
-              fps={inRelay && relayScene === null ? 16 : 8}
+              fps={(inRelay && relayScene === null) || inArcade ? 16 : 8}
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
                 wispMood, discoveries: social.discoveries, sighting,
@@ -652,7 +657,7 @@ export function App() {
                   : undefined,
                 commonsPanel,
                 relayScene,
-                relaySlideAt,
+                carouselSlideAt,
                 relaySub: relayScene === "post"
                   ? { title: "THE POST", items: POST_ITEMS, cursor: relaySubCursor }
                   : relayScene === "pages"

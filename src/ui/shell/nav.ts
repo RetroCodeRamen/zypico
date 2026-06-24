@@ -39,7 +39,7 @@ export interface PlaceDef {
 export const PLACES: PlaceDef[] = [
   { id: "home", label: "WISP", scope: "local", items: ["CARE"] },
   { id: "relay", label: "THE RELAY", scope: "relay", items: ["COMMONS", "TRAVELERS", "THE POST", "PAGES", "STATIONS"] },
-  { id: "arcade", label: "ARCADE", scope: "local", items: ["BOUNCER", "STARFIELD"] },
+  { id: "arcade", label: "ARCADE", scope: "local", items: ["BREAKOUT", "TICTACTOE"] },
   { id: "workshop", label: "WORKSHOP", scope: "local", items: ["CARTS"] },
   { id: "bag", label: "BAG", scope: "local", items: ["ITEMS"] },
   { id: "profile", label: "PROFILE", scope: "local", items: ["IDENTITY", "VAULT"] },

@@ -214,8 +214,8 @@ export interface ScreenModel {
   relayScene?: RelayScene | null;
   /** The Post/Pages sub-menu inside the Relay (its items + cursor). */
   relaySub?: { title: string; items: string[]; cursor: number };
-  /** Epoch ms of the last carousel advance, for the Relay scene-picker slide. */
-  relaySlideAt?: number;
+  /** Epoch ms of the last carousel advance (Relay scene-picker / Arcade slide). */
+  carouselSlideAt?: number;
   /** Who you are, for the PROFILE place (handle + short fingerprint). */
   identityLabel?: { handle: string; fpShort: string };
   /** Whether the test-only "raise a heart" action is available (dev builds). */
@@ -947,7 +947,24 @@ const glyphStations: Glyph = (buf, cx, cy, c) => {
   buf.set(cx - 6, cy - 9, c); buf.set(cx + 6, cy - 9, c);
 };
 
-const RELAY_CARDS: { label: string; glyph: Glyph }[] = [
+const glyphBreakout: Glyph = (buf, cx, cy, c) => {
+  buf.fillRect(cx - 10, cy - 9, 21, 2, c); // brick rows
+  buf.fillRect(cx - 10, cy - 6, 21, 2, c);
+  buf.fillCircle(cx + 2, cy + 1, 1, c); // ball
+  buf.fillRect(cx - 5, cy + 7, 11, 2, c); // paddle
+};
+const glyphTicTac: Glyph = (buf, cx, cy, c) => {
+  buf.fillRect(cx - 3, cy - 9, 1, 18, c); // grid #
+  buf.fillRect(cx + 3, cy - 9, 1, 18, c);
+  buf.fillRect(cx - 9, cy - 3, 18, 1, c);
+  buf.fillRect(cx - 9, cy + 3, 18, 1, c);
+  buf.set(cx - 8, cy - 8, c); buf.set(cx - 6, cy - 6, c); buf.set(cx - 8, cy - 6, c); buf.set(cx - 6, cy - 8, c); // X
+  buf.fillCircle(cx + 6, cy + 6, 2, c); buf.set(cx + 6, cy + 6, c === 0 ? c : 1); // O ring
+};
+
+export interface CarouselCard { label: string; glyph: Glyph }
+
+const RELAY_CARDS: CarouselCard[] = [
   { label: "COMMONS", glyph: glyphCommons },
   { label: "TRAVELERS", glyph: glyphTravelers },
   { label: "THE POST", glyph: glyphPost },
@@ -955,7 +972,12 @@ const RELAY_CARDS: { label: string; glyph: Glyph }[] = [
   { label: "STATIONS", glyph: glyphStations },
 ];
 
-function drawRelayCard(buf: PixelBuffer, cx: number, card: { label: string; glyph: Glyph }, active: boolean): void {
+const ARCADE_CARDS: CarouselCard[] = [
+  { label: "BREAKOUT", glyph: glyphBreakout },
+  { label: "TIC-TAC-TOE", glyph: glyphTicTac },
+];
+
+function drawCarouselCard(buf: PixelBuffer, cx: number, card: CarouselCard, active: boolean): void {
   const x = Math.round(cx);
   const frame = active ? C.title : C.dim;
   const inner = active ? C.text : C.dim;
@@ -970,29 +992,31 @@ function drawRelayCard(buf: PixelBuffer, cx: number, card: { label: string; glyp
 const SLIDE_MS = 400;
 const SLIDE_PITCH = 120; // how far a card travels off-screen
 
-export function drawRelayCarousel(
+/** A framed icon-card carousel: one card centered, SELECT slides to the next.
+ *  Used for the Relay scene picker and the Arcade game picker (REDESIGN §8). */
+export function drawCarousel(
   buf: PixelBuffer,
+  header: string,
+  info: string,
+  cards: CarouselCard[],
   index: number,
   slideAt: number,
-  present: number,
-  stations: number,
 ): void {
   buf.clear(C.bg);
-  drawText(buf, 3, 2, "THE RELAY", C.title);
-  const info = (present > 0 ? `${present} NEAR` : "QUIET") + (stations > 0 ? ` ${stations}ST` : "");
-  drawText(buf, buf.width - measureText(info) - 3, 2, info, present > 0 || stations > 0 ? C.ok : C.dim);
+  drawText(buf, 3, 2, header, C.title);
+  if (info) drawText(buf, buf.width - measureText(info) - 3, 2, info, C.ok);
   divider(buf, 9);
 
-  const n = RELAY_CARDS.length;
+  const n = cards.length;
   const p = slideAt ? Math.min(1, (Date.now() - slideAt) / SLIDE_MS) : 1;
-  if (p < 1) {
+  if (p < 1 && n > 1) {
     // SELECT always advances forward: the previous card slides out left, the
     // new current card slides in from the right.
     const prev = (index - 1 + n) % n;
-    drawRelayCard(buf, 64 - p * SLIDE_PITCH, RELAY_CARDS[prev], false);
-    drawRelayCard(buf, 64 + (1 - p) * SLIDE_PITCH, RELAY_CARDS[index], true);
+    drawCarouselCard(buf, 64 - p * SLIDE_PITCH, cards[prev], false);
+    drawCarouselCard(buf, 64 + (1 - p) * SLIDE_PITCH, cards[index], true);
   } else {
-    drawRelayCard(buf, 64, RELAY_CARDS[index], true);
+    drawCarouselCard(buf, 64, cards[index], true);
   }
 
   // Position dots.
@@ -1076,11 +1100,14 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     else if ((model.relayScene === "post" || model.relayScene === "pages") && model.relaySub) {
       drawSubMenu(buf, model.relaySub.title, model.relaySub.items, model.relaySub.cursor);
     } else {
-      drawRelayCarousel(buf, nav.itemIndex, model.relaySlideAt ?? 0, model.nearbyCount, model.stationList.length);
+      const info = (model.nearbyCount > 0 ? `${model.nearbyCount} NEAR` : "QUIET")
+        + (model.stationList.length > 0 ? ` ${model.stationList.length}ST` : "");
+      drawCarousel(buf, "THE RELAY", info, RELAY_CARDS, nav.itemIndex, model.carouselSlideAt ?? 0);
     }
     return;
   }
-  if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
+  if (place.id === "arcade") drawCarousel(buf, "ARCADE", "", ARCADE_CARDS, nav.itemIndex, model.carouselSlideAt ?? 0);
+  else if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
   else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted);
   else drawPlace(buf, place, nav);
 }
