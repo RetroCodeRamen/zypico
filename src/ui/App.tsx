@@ -27,6 +27,7 @@ import { useSocial } from "@ui/hooks/useSocial.ts";
 import { useIdentity } from "@ui/hooks/useIdentity.ts";
 import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
 import { CartRunner, cleanLuaError } from "@ui/cart/CartRunner.ts";
+import { createWispGame, WISP_GAMES, type WispGame } from "@ui/wispgames/index.ts";
 import { SAMPLE_CARTS } from "@ui/cart/samples.ts";
 // Bundle the Lua WASM as a local asset so Carts run offline on the board.
 import luaWasmUrl from "wasmoon/dist/glue.wasm?url";
@@ -158,6 +159,33 @@ export function App() {
     r.render(buf);
     const err = cart?.preview ? r.getError() : null; // surface runtime errors in preview
     if (err) drawErrorBanner(buf, err);
+  };
+
+  // A running Wisp minigame (from the PLAY verb). Full-screen like a Cart; the
+  // two buttons are its input, CANCEL exits. Leaving applies the "play" Mood.
+  const [wispGame, setWispGame] = useState<{ game: WispGame; name: string } | null>(null);
+  const gamePressRef = useRef({ select: 0, accept: 0 });
+
+  const launchWispGame = (name: string) => {
+    sfx("accept");
+    gamePressRef.current = { select: 0, accept: 0 };
+    setWispGame({ game: createWispGame(name, wispForm(wisp)), name });
+  };
+  const exitWispGame = () => {
+    setWispGame(null);
+    setWisp((w) => ({ ...w, mood: applyCare(w.mood, "play") })); // playing IS the PLAY care
+    sfx("cancel");
+  };
+  const gameDraw = (buf: PixelBuffer, frame: number) => {
+    const g = wispGame?.game;
+    if (!g) { buf.clear(1); return; }
+    const now = Date.now();
+    g.update({
+      select: now - gamePressRef.current.select < 160,
+      accept: now - gamePressRef.current.accept < 160,
+      cancel: false,
+    });
+    g.draw(buf, frame);
   };
 
   // The Workshop (Lua dev env): list → editor → command menu / help. Preview
@@ -297,6 +325,13 @@ export function App() {
       else if (action === "accept") cartPressRef.current.accept = Date.now();
       return;
     }
+    // A running Wisp minigame owns the buttons too (CANCEL leaves to the picker).
+    if (wispGame) {
+      if (action === "cancel") exitWispGame();
+      else if (action === "select") gamePressRef.current.select = Date.now();
+      else if (action === "accept") gamePressRef.current.accept = Date.now();
+      return;
+    }
     if (!identity) {
       handleLoginButton(action);
       return;
@@ -380,15 +415,28 @@ export function App() {
         finishCare(wispView.care, wispView.cursor);
         return;
       }
+      // The PLAY minigame picker.
+      if (wispView.panel === "play") {
+        if (action === "select") setWispView({ panel: "play", cursor: (wispView.cursor + 1) % WISP_GAMES.length });
+        else if (action === "accept") launchWispGame(WISP_GAMES[wispView.cursor]);
+        else if (action === "cancel") setWispView({ panel: "care", cursor: CARES.indexOf("play") });
+        return;
+      }
       const count = careActionCount(CAN_RAISE);
       if (action === "select") {
         setWispView({ panel: "care", cursor: (wispView.cursor + 1) % count });
       } else if (action === "accept") {
         const i = wispView.cursor;
         if (i < CARES.length) {
-          // Play the care verb's animated sequence; the effect lands when it ends.
-          sfx(CARES[i] === "rest" ? "select" : "feed");
-          setWispView({ panel: "act", cursor: i, care: CARES[i], startedAt: Date.now() });
+          if (CARES[i] === "play") {
+            // PLAY opens the minigame picker (REDESIGN §5) rather than a quick anim.
+            sfx("accept");
+            setWispView({ panel: "play", cursor: 0 });
+          } else {
+            // Play the care verb's animated sequence; the effect lands when it ends.
+            sfx(CARES[i] === "rest" ? "select" : "feed");
+            setWispView({ panel: "act", cursor: i, care: CARES[i], startedAt: Date.now() });
+          }
         } else if (i === CARES.length) { // RENAME
           sfx("accept");
           setEditing({
@@ -727,6 +775,8 @@ export function App() {
       : "TYPE password · ACCEPT login · CANCEL switch"
     : cart
       ? cart.error || cart.preview ? "CANCEL back to editor" : "SELECT / ACCEPT play · CANCEL exit"
+    : wispGame
+      ? "SELECT / ACCEPT play · CANCEL done"
     : editing
       ? "TYPE · ACCEPT ok · CANCEL back"
       : workshop
@@ -740,9 +790,11 @@ export function App() {
       : wispView
         ? wispView.panel === "act"
           ? "ANY BUTTON TO SKIP"
-          : wispView.panel === "stats" || wispView.panel === "journal"
-            ? "CANCEL back to care"
-            : "SELECT move · ACCEPT do · CANCEL back"
+          : wispView.panel === "play"
+            ? "SELECT move · ACCEPT play · CANCEL back"
+            : wispView.panel === "stats" || wispView.panel === "journal"
+              ? "CANCEL back to care"
+              : "SELECT move · ACCEPT do · CANCEL back"
         : pageView
           ? pageView.panel === "view"
             ? "ACCEPT sign · CANCEL back"
@@ -788,6 +840,12 @@ export function App() {
             <div className="lcd">
               <div className="matrix">
                 <PixelScreen draw={cartDraw} fps={15} />
+              </div>
+            </div>
+          ) : wispGame ? (
+            <div className="lcd">
+              <div className="matrix">
+                <PixelScreen draw={gameDraw} fps={15} />
               </div>
             </div>
           ) : identity ? (
@@ -867,7 +925,7 @@ export function App() {
             it follows the SETTINGS → KEYBOARD toggle. */}
         {(keyboardEnabled || !identity) && (
           <Keyboard
-            active={!splash && !cart && (!identity || editing !== null || workshop?.mode === "edit")}
+            active={!splash && !cart && !wispGame && (!identity || editing !== null || workshop?.mode === "edit")}
             onType={workshop?.mode === "edit" ? wsInsert : identity ? editType : loginType}
             onBackspace={workshop?.mode === "edit" ? wsBackspace : identity ? editBackspace : loginBackspace}
             onEnter={workshop?.mode === "edit" ? () => wsInsert("\n") : () => handleButton("accept")}

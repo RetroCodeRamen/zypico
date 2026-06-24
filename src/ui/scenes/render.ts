@@ -8,6 +8,7 @@ import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
 import { CELL_H, CELL_W, drawText, drawTextCentered, measureText } from "@ui/pixel/font.ts";
 import { currentPlace, PLACES, type NavState, type PlaceDef, type RelayScene } from "@ui/shell/nav.ts";
 import { caretRowCol, lines, WORKSHOP_MENU, type CartDoc, type WorkshopView } from "@ui/workshop/editor.ts";
+import { WISP_GAMES } from "@ui/wispgames/index.ts";
 import {
   CARE_DEFS,
   CARES,
@@ -84,6 +85,11 @@ export type WispView =
       cursor: number; // the care-panel cursor to return to
       care: Care;
       startedAt: number; // epoch ms the sequence began (drives the animation + apply)
+    }
+  | {
+      /** The PLAY minigame picker (REDESIGN §5/§12). */
+      panel: "play";
+      cursor: number;
     };
 
 /** The PAGES place overlay. `mine` = edit your Traveler Page (cursor: 0 tagline,
@@ -670,6 +676,21 @@ export function drawWispAct(
 
   buf.fillRect(0, 72, buf.width, 8, C.ground);
   drawTextCentered(buf, 73, p < 1 ? "ANY BUTTON TO SKIP" : "...", C.dim);
+}
+
+/** The PLAY picker: choose a Wisp minigame (REDESIGN §5/§12). */
+export function drawWispPlayPicker(buf: PixelBuffer, frame: number, wisp: Wisp, cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, `PLAY WITH ${(wisp.name || "WISP").toUpperCase()}`.slice(0, 26), C.title);
+  divider(buf, 9);
+  drawWisp(buf, 104, 36, frame, wispForm(wisp), 0.6);
+  WISP_GAMES.forEach((g, i) => {
+    const y = 18 + i * 11;
+    if (i === cursor) drawText(buf, 6, y, ">", C.cursor);
+    drawText(buf, 14, y, g, i === cursor ? C.textHi : C.text);
+  });
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT PLAY  CANCEL BACK", C.dim);
 }
 
 /** The WISP stats panel: the creature, its form, age, and the five hearts. */
@@ -1292,6 +1313,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     if (wv.panel === "stats") drawWispStats(buf, frame, model.wisp);
     else if (wv.panel === "journal") drawWispJournal(buf, model.discoveries, Date.now());
     else if (wv.panel === "act") drawWispAct(buf, frame, model.wisp, wv.care, wv.startedAt, model.wispMood);
+    else if (wv.panel === "play") drawWispPlayPicker(buf, frame, model.wisp, wv.cursor);
     else drawWispCare(buf, frame, model.wisp, wv, model.wispMood, model.canRaise);
     return;
   }
