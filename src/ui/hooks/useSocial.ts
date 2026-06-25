@@ -218,7 +218,10 @@ export function useSocial(
     if (!t || !me) return;
     if (link.isConnected()) {
       const ts = hlcRef.current.send();
-      link.send(SubType.POST, encodeRoomMsg(MAIN_ROOM, encodeHlc(ts), me.fingerprint, me.handle, t));
+      // Resend a couple times: a single unacked broadcast frame is sometimes
+      // lost, and the receiver dedupes so no duplicate appears (proven flaky→ok
+      // in the comms-deep harness). Same below for DMs.
+      link.send(SubType.POST, encodeRoomMsg(MAIN_ROOM, encodeHlc(ts), me.fingerprint, me.handle, t), 2);
       ingestRoom({ ts, senderFp: me.fingerprint, handle: me.handle, text: t, mine: true });
       onActivity("broadcast", 4); // posting in the Commons grows Broadcast
       sfx("accept");
@@ -233,7 +236,7 @@ export function useSocial(
     if (!t || !me) return;
     if (link.isConnected()) {
       const sealed = seal(me.secretKey, hexToBytes(buddy.pubkey), new TextEncoder().encode(t));
-      link.send(SubType.IM, encodeDM(buddy.fingerprint, me.fingerprint, sealed));
+      link.send(SubType.IM, encodeDM(buddy.fingerprint, me.fingerprint, sealed), 2); // redundant for reliability
       setDmThreads((d) => ({ ...d, [buddy.fingerprint]: [...(d[buddy.fingerprint] ?? []), { out: true, text: t }] }));
       onActivity("signal", 3); // private messages grow Signal
       sfx("accept");

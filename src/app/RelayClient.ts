@@ -62,9 +62,13 @@ export class RelayClient {
   private pumpTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(private readonly transport: MeshTransport) {
-    // EU868's 1% duty cycle is the conservative default; region awareness and a
-    // modem read from the board land alongside transport config later.
-    this.governor = new AirtimeGovernor({ modem: MODEM_PRESETS.LONG_FAST, dutyCycle: 0.01 });
+    // The governor must model the BOARD's real modem (SF9/BW250 — see
+    // MODEM_PRESETS.ZYPICO), or it mischarges airtime. Duty is 25%: ZyPico is a
+    // small personal mesh on US915 (no EU 1% rule; FCC dwell-time of 400ms/tx is
+    // satisfied since a 40B frame is ~207ms). At 1% with the wrong SF11 estimate,
+    // chat starved — a board could receive but its own sends never drained. 25%
+    // gives sub-second/frame plus a multi-frame burst. (Region-aware later.)
+    this.governor = new AirtimeGovernor({ modem: MODEM_PRESETS.ZYPICO, dutyCycle: 0.25 });
   }
 
   get status(): TransportStatus {
@@ -89,12 +93,23 @@ export class RelayClient {
     return this.transport.onStatus(handler);
   }
 
-  /** Broadcast an arbitrary typed frame (e.g. PRESENCE, IM/DM). */
-  send(subtype: SubType, payload: Uint8Array, priority: Priority = Priority.INTERACTIVE): void {
+  /**
+   * Broadcast an arbitrary typed frame (e.g. PRESENCE, IM/DM). `repeats` resends
+   * the SAME frame (identical msgId) a few times, spaced out — broadcasts are
+   * unacked and a single LoRa frame is sometimes lost, so a small amount of
+   * redundancy makes delivery reliable; the receiver dedupes, so no duplicate
+   * messages appear. Only use on small (single-on-air) frames.
+   */
+  send(subtype: SubType, payload: Uint8Array, priority: Priority = Priority.INTERACTIVE, repeats = 0): void {
     const msgId = (Math.random() * 0x1_0000_0000) >>> 0;
     // Record our own id so the frame's mesh echo (and our repeat of it) dedupes.
     this.dedupe.check(String(msgId));
-    this.enqueueFrame(encodeFrame(subtype, payload, { msgId }), { destination: "broadcast", wantAck: false }, priority);
+    const frame = encodeFrame(subtype, payload, { msgId });
+    const meta: SendMeta = { destination: "broadcast", wantAck: false };
+    this.enqueueFrame(frame, meta, priority);
+    for (let i = 1; i <= repeats && frame.length <= MAX_ONAIR; i++) {
+      setTimeout(() => this.enqueueFrame(frame, meta, priority), i * 700);
+    }
   }
 
   async connect(): Promise<void> {
@@ -155,8 +170,15 @@ export class RelayClient {
     // before consuming — so range extends even for sub-types we can't decode.
     // The dedupe above guarantees we never repeat the same frame twice or loop.
     if (env.hopLimit > 1) {
-      this.governor.enqueue(decrementHop(f.payload), { priority: Priority.BULK, meta: { destination: "broadcast", wantAck: false } });
-      this.pump();
+      // Rebroadcast after a short random delay (Meshtastic-style). Repeating
+      // immediately makes this node deaf (half-duplex TX) right when the sender's
+      // next frame arrives — which dropped frames during bursts; jitter staggers
+      // repeats so they don't collide with the originator or each other.
+      const repeat = decrementHop(f.payload);
+      setTimeout(() => {
+        this.governor.enqueue(repeat, { priority: Priority.BULK, meta: { destination: "broadcast", wantAck: false } });
+        this.pump();
+      }, 250 + Math.random() * 750);
     }
 
     const hops = Math.max(0, DEFAULT_HOPS - env.hopLimit);

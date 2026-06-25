@@ -75,7 +75,8 @@ export function useRelay() {
       return () => { handlersRef.current.delete(fn); };
     },
     isConnected: () => clientRef.current?.status === "connected",
-    send: (subtype: SubType, payload: Uint8Array) => clientRef.current?.send(subtype, payload),
+    // `repeats` resends the same frame for delivery reliability (receiver dedupes).
+    send: (subtype: SubType, payload: Uint8Array, repeats = 0) => clientRef.current?.send(subtype, payload, undefined, repeats),
   };
 }
 

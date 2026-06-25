@@ -57,6 +57,18 @@ export const MODEM_PRESETS = {
     crc: true,
     implicitHeader: false,
   },
+  // ZyPico's actual on-air settings — MUST match firmware (main.cpp: LORA_SF=9,
+  // LORA_BW=250, LORA_CR=5→4/5, LORA_PREAMBLE=8). The governor estimates airtime
+  // from THIS, so a mismatch mischarges every send (it did: LONG_FAST/SF11 made
+  // the governor think frames cost ~3× their real airtime). ~207ms for a 40B frame.
+  ZYPICO: {
+    spreadingFactor: 9,
+    bandwidthHz: 250_000,
+    codingRate: 1,
+    preambleSymbols: 8,
+    crc: true,
+    implicitHeader: false,
+  },
 } as const satisfies Record<string, ModemParams>;
 
 /** Time on air, in milliseconds, for a PHY payload of `payloadBytes`. */
