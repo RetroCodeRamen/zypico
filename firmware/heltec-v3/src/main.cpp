@@ -26,7 +26,9 @@
 #include <U8g2lib.h>
 #include <DNSServer.h>
 #include <ESPmDNS.h>
+#include <Preferences.h>
 #include "logo_xbm.h" // generated: tools/gen-logo.py
+#include "station.h"
 
 // --- Heltec V3 onboard SSD1306 OLED (128x64, I2C) ---
 #define PIN_VEXT 36   // powers the OLED (active LOW)
@@ -67,10 +69,11 @@ static AsyncWebSocket ws("/ws");
 static DNSServer dnsServer; // captive: every name resolves to the board
 #define ZYPICO_HOST "zypico" // → zypico.local via mDNS
 
-static uint32_t nodeId = 0;
+uint32_t nodeId = 0; // global: station.cpp uses it for its setup-AP / station name
 static uint16_t txSeq = 0;
 static char apSsid[24]; // unique per board so two boards are distinguishable
 static volatile bool rxFlag = false;
+static bool stationMode = false; // false = Client (Wisp handheld), true = Station
 
 // Per-connection session id: lets the browser keep a login across page reloads
 // (same id) but drop it when the board reboots (fresh id) or the WiFi client
@@ -131,6 +134,15 @@ static void serialEmitFrame(const uint8_t *buf, int len) {
 
 ICACHE_RAM_ATTR void onLoraRx() { rxFlag = true; }
 
+// Shared LoRa TX: queue a RelayProtocol frame; loop() stamps the MAC header
+// [srcId][seq] and transmits. Used by the browser bridge AND station.cpp.
+void loraQueueFrame(const uint8_t *frame, int len) {
+  TxMsg msg;
+  msg.len = len > MAX_PAYLOAD ? MAX_PAYLOAD : (uint8_t)len;
+  memcpy(msg.data, frame, msg.len);
+  xQueueSend(txQueue, &msg, 0);
+}
+
 static void onWsEvent(AsyncWebSocket *s, AsyncWebSocketClient *client, AwsEventType type,
                       void *arg, uint8_t *data, size_t len) {
   if (type == WS_EVT_CONNECT) {
@@ -153,12 +165,8 @@ static void onWsEvent(AsyncWebSocket *s, AsyncWebSocketClient *client, AwsEventT
   }
 }
 
-void setup() {
-  Serial.begin(115200);
-  nodeId = (uint32_t)(ESP.getEfuseMac() & 0xFFFFFFFF);
-  snprintf(apSsid, sizeof(apSsid), "ZyPico-%08X", (unsigned)nodeId); // full id — unique
-  txQueue = xQueueCreate(8, sizeof(TxMsg));
-
+// Client (Wisp handheld) mode: WiFi AP + serve the React bundle + WS↔LoRa bridge.
+static void clientSetup() {
   // WiFi access point — fully offline, no router/internet. Open network
   // "ZyPico", limited to ONE connected device (max_connection = 1).
   WiFi.mode(WIFI_AP);
@@ -179,19 +187,6 @@ void setup() {
   bool fsok = LittleFS.begin(true);
   Serial.printf("LittleFS mount=%d total=%u used=%u\n", fsok,
                 (unsigned)LittleFS.totalBytes(), (unsigned)LittleFS.usedBytes());
-  File idx = LittleFS.open("/index.html", "r");
-  Serial.printf("index.html exists=%d size=%u\n", idx ? 1 : 0, idx ? (unsigned)idx.size() : 0);
-  if (idx) idx.close();
-
-  SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_NSS);
-  int st = radio.begin(ZYPICO_LORA_FREQ, LORA_BW, LORA_SF, LORA_CR, LORA_SYNC,
-                       LORA_POWER, LORA_PREAMBLE, LORA_TCXO);
-  if (st != RADIOLIB_ERR_NONE) {
-    Serial.printf("LoRa begin failed: %d\n", st);
-  }
-  radio.setDio2AsRfSwitch(true);
-  radio.setPacketReceivedAction(onLoraRx);
-  radio.startReceive();
 
   ws.onEvent(onWsEvent);
   server.addHandler(&ws);
@@ -201,6 +196,12 @@ void setup() {
     res->addHeader("Cache-Control", "no-store");
     req->send(res);
   });
+  // App button: switch this board into Station mode — persist the flag + reboot.
+  server.on("/mode/station", HTTP_POST, [](AsyncWebServerRequest *req) {
+    Preferences m; m.begin("zypico", false); m.putUChar("mode", 1); m.end();
+    req->send(200, "text/plain", "switching to station mode - rebooting");
+    delay(400); ESP.restart();
+  });
   server.serveStatic("/", LittleFS, "/").setDefaultFile("index.html");
   // SPA + captive fallback: any unknown host/path (incl. OS connectivity probes)
   // gets the app, so the phone's captive sign-in opens ZyPico instead of warning.
@@ -208,17 +209,50 @@ void setup() {
     req->send(LittleFS, "/index.html", "text/html");
   });
   server.begin();
+  Serial.printf("ZyPico CLIENT up. nodeId=%u  AP=%s  freq=%.1f\n", nodeId, apSsid, (double)ZYPICO_LORA_FREQ);
+}
 
-  // Onboard OLED: power it via Vext, reset, then show the ZyPico splash/status.
+void setup() {
+  Serial.begin(115200);
+  nodeId = (uint32_t)(ESP.getEfuseMac() & 0xFFFFFFFF);
+  snprintf(apSsid, sizeof(apSsid), "ZyPico-%08X", (unsigned)nodeId); // full id — unique
+  txQueue = xQueueCreate(8, sizeof(TxMsg));
+
+  // Radio — shared by both modes.
+  SPI.begin(PIN_SCK, PIN_MISO, PIN_MOSI, PIN_NSS);
+  int st = radio.begin(ZYPICO_LORA_FREQ, LORA_BW, LORA_SF, LORA_CR, LORA_SYNC,
+                       LORA_POWER, LORA_PREAMBLE, LORA_TCXO);
+  if (st != RADIOLIB_ERR_NONE) Serial.printf("LoRa begin failed: %d\n", st);
+  radio.setDio2AsRfSwitch(true);
+  radio.setPacketReceivedAction(onLoraRx);
+  radio.startReceive();
+
+  // Onboard OLED + USER button — shared.
   pinMode(PIN_VEXT, OUTPUT);
   digitalWrite(PIN_VEXT, LOW); // LOW = OLED powered
   delay(50);
   oled.begin();
   pinMode(PIN_USER_BTN, INPUT_PULLUP);
-  // Boot to the logo splash; it stays until the USER button switches to info.
   drawSplashOled();
 
-  Serial.printf("ZyPico board up. nodeId=%u  AP=%s  freq=%.1f\n", nodeId, apSsid, (double)ZYPICO_LORA_FREQ);
+  // Mode select. Holding USER ~3s at boot forces Client (recovery from a bad
+  // station setup); otherwise read the persisted flag.
+  Preferences mp; mp.begin("zypico", false);
+  bool forceClient = true;
+  for (int i = 0; i < 30; i++) { if (digitalRead(PIN_USER_BTN) != LOW) { forceClient = false; break; } delay(100); }
+  if (forceClient) mp.putUChar("mode", 0); // held the whole time → back to client
+  stationMode = mp.getUChar("mode", 0) == 1;
+#ifdef ZYPICO_FORCE_STATION
+  stationMode = true; // bench-test override
+#endif
+  mp.end();
+
+  if (stationMode) {
+    Serial.println("ZyPico: STATION mode");
+    stationSetup(server, dnsServer);
+  } else {
+    clientSetup();
+  }
 }
 
 static void drawSplashOled() {
@@ -301,12 +335,24 @@ void loop() {
         Serial.printf("RX src=%u seq=%u len=%d rssi=%.0f snr=%.1f\n", src, seq, len, (double)rssi, (double)snr);
         if (src != nodeId) {                                // ignore our own echo
           notePeer(src, (int)rssi, (int)roundf(snr));       // heard directly = in range
-          ws.binaryAll(buf, len);       // forward [srcId][seq][payload] to the browser
-          serialEmitFrame(buf, len);    // …and to the serial test harness
+          if (stationMode) {
+            stationOnFrame(buf + MAC_HEADER, len - MAC_HEADER); // repeater (strip MAC header)
+          } else {
+            ws.binaryAll(buf, len);       // forward [srcId][seq][payload] to the browser
+            serialEmitFrame(buf, len);    // …and to the serial test harness
+          }
         }
       }
     }
     radio.startReceive();
+  }
+
+  // Station mode: no browser/serial bridge — just the captive setup DNS + the
+  // station's own work (jittered repeats, periodic beacon). Skip the client tail.
+  if (stationMode) {
+    dnsServer.processNextRequest();
+    stationLoop();
+    return;
   }
 
   ws.cleanupClients();

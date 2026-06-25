@@ -145,6 +145,9 @@ export function App() {
   const vault = useVault(identity, link, reloadLocal);
   const [vaultView, setVaultView] = useState<VaultView | null>(null);
 
+  // A reusable yes/no confirmation overlay (e.g. switching to Station mode).
+  const [confirm, setConfirm] = useState<{ text: string; onYes: () => void } | null>(null);
+
   // A running Cart (Arcade game, or a Workshop preview). runner null + no error
   // = still loading; error set = compile failure; preview = launched to test.
   const [cart, setCart] = useState<{ runner: CartRunner | null; name: string; error: string | null; preview: boolean } | null>(null);
@@ -493,6 +496,13 @@ export function App() {
     // Base button feedback; specific outcomes may add their own sound below.
     if (action === "select") sfx("select");
     else if (action === "cancel") sfx("cancel");
+
+    // A confirmation dialog captures the buttons until answered.
+    if (confirm) {
+      if (action === "accept") { const yes = confirm.onYes; setConfirm(null); yes(); }
+      else if (action === "cancel") setConfirm(null);
+      return;
+    }
 
     // A WISP BATTLE owns the screen + buttons whenever one is live (§6).
     if (battle.view.phase !== "idle") {
@@ -887,6 +897,16 @@ export function App() {
           navDispatch("accept"); // select so the toggle state shows
           return;
         }
+        if (item === "STATION MODE") {
+          // Turn this board into a Station — confirm, then tell the firmware to
+          // reboot into station/setup mode (the AP + this app then go away).
+          sfx("accept");
+          setConfirm({
+            text: "RESTART THIS BOARD AS A STATION? IT WILL BROADCAST ZYPICO-SETUP — RECONNECT THERE TO FINISH WIFI SETUP.",
+            onYes: () => { void fetch("/mode/station", { method: "POST" }).catch(() => {}); },
+          });
+          return;
+        }
         if (item === "RELAY") {
           // Ambient link control: report status (select) + re-link / drop.
           sfx("accept");
@@ -971,6 +991,8 @@ export function App() {
       ? cart.error || cart.preview ? "CANCEL back to editor" : "SELECT / ACCEPT play · CANCEL exit"
     : wispGame
       ? "SELECT / ACCEPT play · CANCEL done"
+    : confirm
+      ? "ACCEPT yes · CANCEL no"
     : battle.view.phase !== "idle"
       ? battle.view.phase === "invited"
         ? "ACCEPT fight · CANCEL decline"
@@ -1112,6 +1134,7 @@ export function App() {
                 alertsCursor,
                 bag: bagItems.map((it) => ({ name: it.name, count: it.count, kind: it.kind, desc: it.desc, usable: it.usable })),
                 bagCursor,
+                confirm: confirm?.text ?? null,
                 workshop,
                 myCartNames: myCarts.map((c) => c.name),
                 stationList: social.stations

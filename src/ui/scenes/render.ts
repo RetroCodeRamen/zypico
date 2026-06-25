@@ -241,6 +241,8 @@ export interface ScreenModel {
   keyboardEnabled?: boolean;
   /** Whether the login persists across reloads (SETTINGS → STAY SIGNED IN). */
   staySignedIn?: boolean;
+  /** A yes/no confirmation overlay's prompt text, when open. */
+  confirm?: string | null;
   /** The Workshop overlay (Lua editor), when open. */
   workshop?: WorkshopView | null;
   /** Names of your authored carts (WORKSHOP → MY CARTS list). */
@@ -508,6 +510,10 @@ export function drawSettings(
   } else if (item === "STAY SIGNED IN") {
     drawTextCentered(buf, 49, staySignedIn ? "STAY SIGNED IN: ON" : "STAY SIGNED IN: OFF", staySignedIn ? C.ok : C.dim);
     drawTextCentered(buf, 57, staySignedIn ? "REMEMBERS YOU ON RELOAD" : "ACCEPT TO TOGGLE", C.dim);
+  } else if (item === "STATION MODE") {
+    drawTextCentered(buf, 49, "TURN THIS BOARD INTO", C.text);
+    drawTextCentered(buf, 57, "A STATION", C.warn);
+    drawTextCentered(buf, 65, "ACCEPT TO SET UP", C.dim);
   } else if (item === "RELAY") {
     drawTextCentered(buf, 49, relay.statusLabel, relay.online ? C.ok : relay.detail ? C.warn : C.dim);
     if (relay.online) {
@@ -1438,7 +1444,21 @@ export function drawBag(buf: PixelBuffer, items: BagItem[], cursor: number): voi
   drawTextCentered(buf, 73, sel.usable ? "ACCEPT use  CANCEL back" : "A KEEPSAKE  CANCEL back", C.dim);
 }
 
+/** A yes/no confirmation overlay (ACCEPT = yes, CANCEL = no). */
+export function drawConfirm(buf: PixelBuffer, text: string): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 3, "CONFIRM", C.title);
+  divider(buf, 11);
+  wrapText(text, Math.floor((buf.width - 6) / CELL_W)).slice(0, 6).forEach((ln, i) => drawText(buf, 3, 18 + i * 8, ln, C.text));
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, "ACCEPT yes  CANCEL no", C.dim);
+}
+
 export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel): void {
+  if (model.confirm) {
+    drawConfirm(buf, model.confirm);
+    return;
+  }
   if (model.editing) {
     drawEditor(buf, frame, model.editing);
     return;
