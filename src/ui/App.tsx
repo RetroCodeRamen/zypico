@@ -28,6 +28,8 @@ import { useIdentity } from "@ui/hooks/useIdentity.ts";
 import type { PixelBuffer } from "@ui/pixel/PixelBuffer.ts";
 import { CartRunner, cleanLuaError } from "@ui/cart/CartRunner.ts";
 import { createWispGame, WISP_GAMES, type WispGame } from "@ui/wispgames/index.ts";
+import { useBattle } from "@ui/hooks/useBattle.ts";
+import { drawBattle } from "@ui/scenes/render.ts";
 import { SAMPLE_CARTS } from "@ui/cart/samples.ts";
 // Bundle the Lua WASM as a local asset so Carts run offline on the board.
 import luaWasmUrl from "wasmoon/dist/glue.wasm?url";
@@ -118,6 +120,14 @@ export function App() {
   // The Exchange: Carts you hold (yours + received over the mesh) — run + share.
   const cartExchange = useCartExchange(identity, link);
   const [exchangeView, setExchangeView] = useState<ExchangeView | null>(null);
+
+  // Wisp battles (REDESIGN §6): a commit/reveal duel with a Traveler over LoRa.
+  const resolveHandle = (fp: string): string => {
+    const b = social.buddies.find((x) => x.fingerprint === fp);
+    if (b) return b.petname ?? b.handle;
+    return social.nearby.find((x) => x.fingerprint === fp)?.handle ?? fp.slice(0, 8).toUpperCase();
+  };
+  const battle = useBattle(identity, link, () => formWireIndex(wispForm(wisp).id), resolveHandle);
 
   // Account Vault: encrypted backup/restore at a Station. Restore re-loads every
   // local hook from the freshly-restored storage.
@@ -340,6 +350,27 @@ export function App() {
     if (action === "select") sfx("select");
     else if (action === "cancel") sfx("cancel");
 
+    // A WISP BATTLE owns the screen + buttons whenever one is live (§6).
+    if (battle.view.phase !== "idle") {
+      const ph = battle.view.phase;
+      if (ph === "invited") {
+        if (action === "accept") battle.accept();
+        else if (action === "cancel") battle.decline();
+      } else if (ph === "choose") {
+        if (action === "select") battle.choose(0);
+        else if (action === "accept") battle.choose(1);
+        else if (action === "cancel") battle.exit(); // leave the match (no result)
+      } else if (ph === "result") {
+        if (action === "cancel") battle.exit();
+        else battle.nextRound();
+      } else if (ph === "won" || ph === "lost" || ph === "aborted") {
+        battle.exit();
+      } else if (action === "cancel") {
+        battle.exit(); // inviting / wait / reveal → abandon
+      }
+      return;
+    }
+
     if (editing) {
       if (action === "accept") { sfx("accept"); editSubmit(); }
       else if (action === "cancel") editCancel();
@@ -556,6 +587,9 @@ export function App() {
             // Chat needs the peer reachable; offer Mail instead (never silent).
             setEditing({ label: `MAIL ${name}`.slice(0, 18), value: "", onSubmit: (v) => postOffice.compose(buddy.fingerprint, name, v) });
           }
+        } else if (action === "select" && buddy) {
+          // Challenge them to a Wisp battle (§6); the overlay takes over from here.
+          battle.invite(buddy.fingerprint, buddy.petname ?? buddy.handle);
         } else if (action === "cancel") {
           setFriendsThread(null);
         }
@@ -777,6 +811,16 @@ export function App() {
       ? cart.error || cart.preview ? "CANCEL back to editor" : "SELECT / ACCEPT play · CANCEL exit"
     : wispGame
       ? "SELECT / ACCEPT play · CANCEL done"
+    : battle.view.phase !== "idle"
+      ? battle.view.phase === "invited"
+        ? "ACCEPT fight · CANCEL decline"
+        : battle.view.phase === "choose"
+          ? "SELECT or ACCEPT to choose · CANCEL quit"
+          : battle.view.phase === "result"
+            ? "ACCEPT next round"
+            : battle.view.phase === "won" || battle.view.phase === "lost" || battle.view.phase === "aborted"
+              ? "ANY BUTTON to leave"
+              : "CANCEL to abandon"
     : editing
       ? "TYPE · ACCEPT ok · CANCEL back"
       : workshop
@@ -814,7 +858,7 @@ export function App() {
               ? "SELECT move · ACCEPT write · CANCEL back"
               : "SELECT move · ACCEPT read · CANCEL back"
         : inFriends && friendsThread
-          ? "ACCEPT write · CANCEL back"
+          ? "ACCEPT write · SELECT battle · CANCEL back"
           : inFriends
             ? "SELECT move · ACCEPT add/open · CANCEL back"
             : inCommons
@@ -846,6 +890,12 @@ export function App() {
             <div className="lcd">
               <div className="matrix">
                 <PixelScreen draw={gameDraw} fps={15} />
+              </div>
+            </div>
+          ) : identity && battle.view.phase !== "idle" ? (
+            <div className="lcd">
+              <div className="matrix">
+                <PixelScreen draw={(buf, f) => drawBattle(buf, f, battle.view)} fps={12} />
               </div>
             </div>
           ) : identity ? (

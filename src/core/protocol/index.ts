@@ -28,6 +28,12 @@ export {
   decodeCart, decodeCartReq, encodeCart, encodeCartReq, type CartMsg,
 } from "./cart.ts";
 export {
+  attackerScores, battleCommit, CHOICE_ACCEPT, CHOICE_SELECT, decodeBattleInvite, decodeBattleMove,
+  decodeBattleResult, encodeBattleAccept, encodeBattleCommit, encodeBattleInvite, encodeBattleResult,
+  encodeBattleReveal, inviterAttacks, verifyCommit, WIN_SCORE,
+  type BattleInvite, type BattleInviteMsg, type BattleMove, type BattleResult,
+} from "./battle.ts";
+export {
   decodeGuestbook,
   decodePage,
   decodePageReq,

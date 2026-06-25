@@ -9,6 +9,9 @@ import { CELL_H, CELL_W, drawText, drawTextCentered, measureText } from "@ui/pix
 import { currentPlace, PLACES, type NavState, type PlaceDef, type RelayScene } from "@ui/shell/nav.ts";
 import { caretRowCol, lines, WORKSHOP_MENU, type CartDoc, type WorkshopView } from "@ui/workshop/editor.ts";
 import { WISP_GAMES } from "@ui/wispgames/index.ts";
+import { inviterAttacks } from "@core/protocol/index.ts";
+import { formByWireIndex } from "@core/companion/index.ts";
+import type { BattleView } from "@ui/hooks/useBattle.ts";
 import {
   CARE_DEFS,
   CARES,
@@ -1293,6 +1296,87 @@ export function drawCartError(buf: PixelBuffer, msg: string): void {
 export function drawErrorBanner(buf: PixelBuffer, msg: string): void {
   buf.fillRect(0, 73, buf.width, 7, C.warn);
   drawText(buf, 2, 74, msg.toUpperCase().slice(0, Math.floor((buf.width - 4) / CELL_W)), C.selText);
+}
+
+// ---- Wisp battles (REDESIGN §6) — full-screen, driven by useBattle ----------
+const CHOICE_LABEL = ["SELECT", "ACCEPT"];
+
+export function drawBattle(buf: PixelBuffer, frame: number, view: BattleView): void {
+  buf.clear(C.bg);
+  const mine = formByWireIndex(view.myForm);
+  const opp = formByWireIndex(view.oppForm);
+  const ot = (view.oppHandle || "RIVAL").toUpperCase().slice(0, 10);
+
+  if (view.phase === "invited") {
+    drawText(buf, 3, 3, "CHALLENGE!", C.title);
+    divider(buf, 11);
+    drawWisp(buf, 64, 34, frame, opp, 0.9);
+    drawTextCentered(buf, 50, `${ot} WANTS TO BATTLE`, C.text);
+    buf.fillRect(0, 72, buf.width, 8, C.ground);
+    drawTextCentered(buf, 73, "ACCEPT FIGHT  CANCEL DECLINE", C.dim);
+    return;
+  }
+  if (view.phase === "inviting") {
+    drawTextCentered(buf, 20, "CHALLENGING", C.title);
+    drawTextCentered(buf, 30, ot, C.textHi);
+    drawWisp(buf, 64, 50, frame, mine, 0.7);
+    if (frame % 24 < 16) drawTextCentered(buf, 64, "WAITING...", C.dim);
+    buf.fillRect(0, 72, buf.width, 8, C.ground);
+    drawTextCentered(buf, 73, "CANCEL TO ABORT", C.dim);
+    return;
+  }
+  if (view.phase === "aborted") {
+    drawTextCentered(buf, 30, view.message ?? "BATTLE ENDED", C.warn);
+    drawTextCentered(buf, 42, "NO RESULT RECORDED", C.dim);
+    buf.fillRect(0, 72, buf.width, 8, C.ground);
+    drawTextCentered(buf, 73, "ANY BUTTON TO LEAVE", C.dim);
+    return;
+  }
+
+  // Scoreboard (in-match phases).
+  drawText(buf, 3, 2, `YOU ${view.myScore}`, C.ok);
+  drawText(buf, buf.width - measureText(`${ot} ${view.oppScore}`) - 3, 2, `${ot} ${view.oppScore}`, C.warn);
+  divider(buf, 9);
+
+  if (view.phase === "won" || view.phase === "lost") {
+    const win = view.phase === "won";
+    drawWisp(buf, 64, 38, frame + (win ? 0 : 0), win ? mine : opp, win ? 1 : 0.7);
+    if (win) for (let i = 0; i < 6; i++) { // victory sparkles
+      const a = (i / 6) * Math.PI * 2 + frame * 0.2;
+      buf.set(64 + Math.round(Math.cos(a) * 20), 38 + Math.round(Math.sin(a) * 16), C.textHi);
+    }
+    drawTextCentered(buf, 60, win ? "YOU WIN!" : "DEFEATED", win ? C.title : C.dim);
+    buf.fillRect(0, 72, buf.width, 8, C.ground);
+    drawTextCentered(buf, 73, "ANY BUTTON TO LEAVE", C.dim);
+    return;
+  }
+
+  // Both wisps facing off; the attacker lunges on the result beat.
+  const iAttack = view.amInviter === inviterAttacks(view.round);
+  const lunge = view.phase === "result" && view.last
+    ? (view.last.iScored ? 8 : view.last.iAttacked ? 0 : 0)
+    : 0;
+  const oppLunge = view.phase === "result" && view.last && !view.last.iAttacked && view.last.iScored ? 8 : 0;
+  drawWisp(buf, 30 + lunge, 38, frame, mine, 0.8);
+  drawWisp(buf, 98 - oppLunge, 38, frame, opp, 0.8);
+
+  if (view.phase === "choose") {
+    drawTextCentered(buf, 14, `ROUND ${view.round + 1}`, C.dim);
+    drawTextCentered(buf, 24, iAttack ? "YOU ATTACK" : "YOU DEFEND", iAttack ? C.warn : C.tagRelay);
+    buf.fillRect(0, 72, buf.width, 8, C.ground);
+    drawTextCentered(buf, 73, "SELECT or ACCEPT to choose", C.dim);
+  } else if (view.phase === "wait") {
+    drawTextCentered(buf, 24, "COMMITTED", C.ok);
+    if (frame % 24 < 16) drawTextCentered(buf, 58, "WAITING FOR RIVAL", C.dim);
+  } else if (view.phase === "reveal") {
+    drawTextCentered(buf, 24, "REVEALING...", C.title);
+  } else if (view.phase === "result" && view.last) {
+    const { myChoice, oppChoice, iScored, iAttacked } = view.last;
+    drawText(buf, 14, 56, `YOU:${CHOICE_LABEL[myChoice][0]}`, C.ok);
+    drawText(buf, 86, 56, `${CHOICE_LABEL[oppChoice][0]}:RIV`, C.warn);
+    const banner = iScored ? "YOU SCORE!" : (!iAttacked && oppChoice !== myChoice) ? "RIVAL SCORES" : "BLOCKED!";
+    drawTextCentered(buf, 24, banner, iScored ? C.title : banner === "BLOCKED!" ? C.tagRelay : C.warn);
+  }
 }
 
 export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel): void {
