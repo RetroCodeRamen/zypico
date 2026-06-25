@@ -49,8 +49,11 @@ describe("battle protocol", () => {
   it("resolves rounds the same on both devices (differ = score, match = block)", () => {
     expect(attackerScores(CHOICE_SELECT, CHOICE_ACCEPT)).toBe(true);
     expect(attackerScores(CHOICE_ACCEPT, CHOICE_ACCEPT)).toBe(false);
-    expect(inviterAttacks(0)).toBe(true);
-    expect(inviterAttacks(1)).toBe(false);
+    // First attacker depends on battleId parity; roles still alternate by round.
+    expect(inviterAttacks(0, 0)).toBe(true); // even battleId → inviter attacks round 0
+    expect(inviterAttacks(1, 0)).toBe(false);
+    expect(inviterAttacks(0, 1)).toBe(false); // odd battleId → invitee attacks round 0
+    expect(inviterAttacks(1, 1)).toBe(true);
   });
 
   it("rejects malformed payloads", () => {

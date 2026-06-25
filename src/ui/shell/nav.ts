@@ -64,6 +64,7 @@ export type NavAction =
   | "select-prev"
   | "accept"
   | "cancel"
+  | "home" // jump straight to the idle Wisp home (hold-CANCEL from anywhere)
   // Desktop affordance: click an icon to jump straight into that place.
   | { type: "goto"; index: number };
 
@@ -98,6 +99,7 @@ function wrap(i: number, n: number): number {
 }
 
 export function navReduce(state: NavState, action: NavAction): NavState {
+  if (action === "home") return INITIAL_NAV; // hold-CANCEL → idle Wisp home
   if (typeof action === "object") {
     // goto: open the clicked place directly.
     return {

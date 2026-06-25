@@ -259,8 +259,8 @@ export interface ScreenModel {
   muted: boolean;
   /** Reachable Travelers right now — drives the home activity stars (§6.4). */
   nearbyCount: number;
-  /** A recent thing the Wisp saw, voiced on the idle home (DESIGN §2). */
-  sighting?: string;
+  /** A recent thing the Wisp saw, voiced on the idle home (DESIGN §2 / §11). */
+  sighting?: { kind: string; name: string };
 }
 
 export interface FriendsView {
@@ -339,7 +339,7 @@ export function drawCompanion(
   muted?: boolean,
   online?: boolean,
   nearbyCount = 0,
-  sighting?: string,
+  sighting?: { kind: string; name: string },
 ): void {
   buf.clear(C.bg);
   buf.fillRect(0, 66, buf.width, 14, C.ground);
@@ -399,7 +399,14 @@ export function drawCompanion(
   if (VOICED.has(mood.state)) {
     for (const l of MOOD_STATE_DEFS[mood.state].lines) pool.push([l, MOOD_STATE_DEFS[mood.state].color]);
   }
-  if (sighting) pool.push([`I SAW ${sighting.toUpperCase()}`.slice(0, 21), C.ok]);
+  if (sighting) {
+    const nm = sighting.name.toUpperCase();
+    const line = sighting.kind === "reunion" ? `${nm} IS BACK`
+      : sighting.kind === "station-changed" ? `${nm} CHANGED`
+      : sighting.kind === "station" ? `FOUND ${nm}`
+      : `MET ${nm}`; // traveler
+    pool.push([line.slice(0, 21), sighting.kind === "station-changed" ? C.tagRelay : C.ok]);
+  }
   if (pool.length === 0) {
     drawTextCentered(buf, 73, "SELECT TO EXPLORE", C.dim);
   } else {
@@ -639,8 +646,15 @@ export function drawWispAct(
   if (care === "feed") {
     const bowlY = 60;
     buf.fillRect(cx - 9, bowlY, 18, 3, 4); // bowl
-    buf.fillRect(cx - 7, bowlY - 2, Math.round(14 * Math.max(0, 1 - p * 1.3)), 2, 9); // food shrinks
-    const lean = Math.sin(p * pi) * 8;
+    // Form-specific eating (REDESIGN §4): a Flicker nibbles, an Ember swallows
+    // whole, a Glow bats it first, a Beacon eats neatly.
+    const tier = form.tier;
+    let eaten = p;          // how gone the food is at progress p
+    let lean = Math.sin(p * pi) * 8;
+    if (tier === 1) { eaten = p; lean = Math.abs(Math.sin(p * pi * 4)) * 6; }       // nibble: lots of small bites
+    else if (tier === 2) { eaten = Math.min(1, p * 2.6); lean = Math.sin(p * pi) * 11; } // swallow whole, fast + a big gulp
+    else if (tier === 3) { eaten = p < 0.3 ? 0 : (p - 0.3) / 0.7; lean = p < 0.3 ? -Math.abs(Math.sin(p * pi * 6)) * 7 : Math.sin(p * pi) * 8; } // bat it first
+    buf.fillRect(cx - 7, bowlY - 2, Math.round(14 * Math.max(0, 1 - eaten * 1.1)), 2, 9); // food shrinks
     drawWisp(buf, cx, cy - 4 + lean, frame, tinted, 0.85);
     if (p > 0.65) drawText(buf, cx + 11, cy - 12 - Math.round((p - 0.65) * 26), "<3", 14);
     if (frame % 6 < 3) buf.set(cx - 6 + (frame % 14), bowlY - 1, 9); // crumbs
@@ -750,11 +764,14 @@ export function drawWispJournal(buf: PixelBuffer, discoveries: Discovery[], now:
     drawTextCentered(buf, 40, "THE WISP IS WATCHING", C.dim);
   } else {
     // Newest first; the Wisp recounts its recent sightings.
+    const verb: Record<string, string> = { traveler: "MET", reunion: "AGAIN", station: "FOUND", "station-changed": "CHANGED" };
     [...discoveries].reverse().slice(0, 8).forEach((d, i) => {
       const y = 13 + i * 7;
       const age = ago(Math.max(0, now - d.at));
-      drawText(buf, 2, y, "-", d.kind === "station" ? C.tagRelay : C.ok);
-      drawText(buf, 7, y, d.name.toUpperCase().slice(0, 16), C.text);
+      const isStation = d.kind === "station" || d.kind === "station-changed";
+      drawText(buf, 2, y, "-", isStation ? C.tagRelay : C.ok);
+      const label = `${verb[d.kind] ?? "SAW"} ${d.name.toUpperCase()}`.slice(0, 17);
+      drawText(buf, 7, y, label, C.text);
       drawText(buf, buf.width - measureText(age) - 3, y, age, C.dim);
     });
   }
@@ -1364,7 +1381,7 @@ export function drawBattle(buf: PixelBuffer, frame: number, view: BattleView): v
   }
 
   // Both wisps facing off; the attacker lunges on the result beat.
-  const iAttack = view.amInviter === inviterAttacks(view.round);
+  const iAttack = view.amInviter === inviterAttacks(view.round, view.battleId);
   const lunge = view.phase === "result" && view.last
     ? (view.last.iScored ? 8 : view.last.iAttacked ? 0 : 0)
     : 0;

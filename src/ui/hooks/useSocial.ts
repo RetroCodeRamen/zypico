@@ -121,8 +121,10 @@ export function useSocial(
       setNearby((prev) => [...prev.filter((x) => x.fingerprint !== p.fingerprint), entry].slice(-30));
       if (isNew) {
         onActivity("journey", 2); // discovering the world grows Journey
-        // The Wisp notices the passing Traveler and remembers it (DESIGN §2).
-        setDiscoveries((prev) => addDiscovery(prev, { kind: "traveler", name: p.handle, at: Date.now() }));
+        // The Wisp notices the Traveler and remembers it — a familiar face
+        // (a buddy) coming back into range is a "reunion" (DESIGN §2 / §11).
+        const known = buddiesRef.current.some((b) => b.fingerprint === p.fingerprint);
+        setDiscoveries((prev) => addDiscovery(prev, { kind: known ? "reunion" : "traveler", name: p.handle, at: Date.now() }));
         echoPresence(); // wave back so they discover us too (mutual discovery)
       }
     } else if (f.subtype === SubType.IM) {
@@ -144,11 +146,13 @@ export function useSocial(
     } else if (f.subtype === SubType.STATION) {
       const s = decodeStationBeacon(f.payload);
       if (!s) return;
-      const isNew = !stationsRef.current.some((x) => x.fingerprint === s.fingerprint);
+      const prevStation = stationsRef.current.find((x) => x.fingerprint === s.fingerprint);
       const entry: KnownStation = { ...s, lastSeen: Date.now(), hops: f.hops };
       setStations((prev) => [...prev.filter((x) => x.fingerprint !== s.fingerprint), entry].slice(-10));
-      // The Wisp hears about Stations too (DESIGN §2 "lives its life").
-      if (isNew) setDiscoveries((prev) => addDiscovery(prev, { kind: "station", name: s.name, at: Date.now() }));
+      // The Wisp hears about Stations too, and notices when a known one's
+      // services changed since last time (DESIGN §2 / §11 "changed since visit").
+      if (!prevStation) setDiscoveries((prev) => addDiscovery(prev, { kind: "station", name: s.name, at: Date.now() }));
+      else if (prevStation.services !== s.services) setDiscoveries((prev) => addDiscovery(prev, { kind: "station-changed", name: s.name, at: Date.now() }));
     }
   };
 

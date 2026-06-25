@@ -23,6 +23,7 @@ export interface BattleView {
   oppForm: number;
   myForm: number;
   amInviter: boolean;
+  battleId: number; // who attacks first is derived from this (fairness)
   round: number;
   myScore: number;
   oppScore: number;
@@ -34,7 +35,7 @@ export interface BattleView {
 
 const IDLE: BattleView = {
   phase: "idle", oppHandle: "", oppForm: 0, myForm: 0, amInviter: false,
-  round: 0, myScore: 0, oppScore: 0, myChoice: null, last: null,
+  battleId: 0, round: 0, myScore: 0, oppScore: 0, myChoice: null, last: null,
 };
 
 const RETRANSMIT_MS = 2500;
@@ -97,7 +98,7 @@ export function useBattle(
     if (!me || !link.isConnected()) return;
     const battleId = rngU32();
     m.current.battleId = battleId; m.current.oppFp = oppFp; resetMatch();
-    set({ ...IDLE, phase: "inviting", oppHandle, oppForm, myForm: formRef.current(), amInviter: true });
+    set({ ...IDLE, phase: "inviting", oppHandle, oppForm, myForm: formRef.current(), amInviter: true, battleId });
     sendTracked(SubType.GAME_INVITE, encodeBattleInvite({ battleId, fromFp: me.fingerprint, wispForm: formRef.current(), nonce: rngU32() }));
     sfx("connect");
   };
@@ -151,7 +152,7 @@ export function useBattle(
   const resolve = (oppChoice: number) => {
     const cur = v.current;
     const myChoice = cur.myChoice ?? 0;
-    const iAttack = cur.amInviter === inviterAttacks(cur.round);
+    const iAttack = cur.amInviter === inviterAttacks(cur.round, cur.battleId);
     const att = iAttack ? myChoice : oppChoice;
     const blk = iAttack ? oppChoice : myChoice;
     const scored = attackerScores(att, blk);
@@ -184,7 +185,7 @@ export function useBattle(
       if (msg.kind === "invite") {
         if (v.current.phase !== "idle") return; // busy — ignore (no async hold yet)
         m.current.battleId = msg.battleId; m.current.oppFp = msg.fromFp; resetMatch();
-        set({ ...IDLE, phase: "invited", oppHandle: resolveRef.current(msg.fromFp), oppForm: msg.wispForm, myForm: formRef.current(), amInviter: false });
+        set({ ...IDLE, phase: "invited", oppHandle: resolveRef.current(msg.fromFp), oppForm: msg.wispForm, myForm: formRef.current(), amInviter: false, battleId: msg.battleId });
         sfx("connect");
       } else if (msg.kind === "accept" && msg.battleId === m.current.battleId && v.current.phase === "inviting") {
         if (!msg.accept) { abort("DECLINED"); return; }

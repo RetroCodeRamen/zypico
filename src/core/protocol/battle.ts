@@ -113,9 +113,10 @@ export function verifyCommit(choice: number, salt: Uint8Array, commit: Uint8Arra
   return c.length === commit.length && c.every((b, i) => b === commit[i]);
 }
 
-/** Roles alternate every round; the inviter attacks on even rounds (§6). */
-export function inviterAttacks(round: number): boolean {
-  return round % 2 === 0;
+/** Roles alternate every round; WHO attacks first is randomized by the battleId
+ *  (both devices know it), so the challenger has no first-mover edge (§6). */
+export function inviterAttacks(round: number, battleId: number): boolean {
+  return ((round + (battleId & 1)) % 2) === 0;
 }
 /** The attacker scores iff the two choices differ; a match is a block (§6). */
 export function attackerScores(attackerChoice: number, blockerChoice: number): boolean {

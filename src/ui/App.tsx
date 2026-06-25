@@ -921,6 +921,23 @@ export function App() {
     navDispatch(action);
   };
 
+  // Hold-CANCEL → jump straight to the idle Wisp home from anywhere (REDESIGN
+  // §13), clearing whatever scene/overlay/game is open.
+  const goHome = () => {
+    exitCart();
+    setWispGame(null);
+    if (battle.view.phase !== "idle") battle.exit();
+    setConfirm(null); setEditing(null);
+    setWispView(null); setRelayScene(null); setPageView(null); setPostView(null);
+    setVaultView(null); setExchangeView(null); setWorkshop(null); setFriendsThread(null);
+    navDispatch("home");
+    sfx("cancel");
+  };
+  // The contexts where a CANCEL hold means "go home" (vs. an overlay's own cancel).
+  const normalNav = identity != null && !editing && !cart && !wispGame
+    && battle.view.phase === "idle" && !confirm && workshop?.mode !== "edit";
+  const cancelHoldRef = useRef<{ timer: ReturnType<typeof setTimeout>; fired: boolean } | null>(null);
+
   // Keep the latest handler in a ref so the keydown listener (bound once) never
   // reads stale state.
   const keyRef = useRef<(e: KeyboardEvent) => void>(() => {});
@@ -938,6 +955,14 @@ export function App() {
       if (e.key === "Backspace") return e.preventDefault(), wsBackspace();
       if (e.key === "Escape") return e.preventDefault(), setWorkshop({ mode: "menu", cursor: 0, doc: workshop.doc });
       if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) return e.preventDefault(), wsInsert(e.key);
+      return;
+    }
+    // CANCEL key in normal nav: tap = back (on keyup), hold = jump Home.
+    if ((e.key === "ArrowRight" || e.key === "Escape") && normalNav) {
+      e.preventDefault();
+      if (!e.repeat && !cancelHoldRef.current) {
+        cancelHoldRef.current = { fired: false, timer: setTimeout(() => { if (cancelHoldRef.current) cancelHoldRef.current.fired = true; goHome(); }, 500) };
+      }
       return;
     }
     // Arrow keys mirror the three buttons (the mapping you asked for).
@@ -965,17 +990,30 @@ export function App() {
     if (e.key === "Escape") return handleButton("cancel");
   };
 
+  // Latest keyup handler in a ref (resolves the CANCEL tap-vs-hold on release).
+  const keyUpRef = useRef<(e: KeyboardEvent) => void>(() => {});
+  keyUpRef.current = (e: KeyboardEvent) => {
+    if ((e.key === "ArrowRight" || e.key === "Escape") && cancelHoldRef.current) {
+      const h = cancelHoldRef.current;
+      cancelHoldRef.current = null;
+      clearTimeout(h.timer);
+      if (!h.fired) handleButton("cancel"); // a tap (released before the hold) = back
+    }
+  };
+
   useEffect(() => {
-    const f = (e: KeyboardEvent) => keyRef.current(e);
-    window.addEventListener("keydown", f);
-    return () => window.removeEventListener("keydown", f);
+    const down = (e: KeyboardEvent) => keyRef.current(e);
+    const up = (e: KeyboardEvent) => keyUpRef.current(e);
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => { window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, []);
 
   // The Wisp's settled mood (App owns the clock; the renderer stays pure).
   const now = Date.now();
   // A recent thing the Wisp saw (last 24h) for it to mention on the home.
   const latest = social.discoveries[social.discoveries.length - 1];
-  const sighting = latest && now - latest.at < 86_400_000 ? latest.name : undefined;
+  const sighting = latest && now - latest.at < 86_400_000 ? { kind: latest.kind, name: latest.name } : undefined;
   const settledMood = settleMood(wisp.mood, now);
   const wispMood: MoodSummary = {
     state: moodState(wisp.mood, now),
@@ -1162,7 +1200,7 @@ export function App() {
             </div>
           )}
         </div>
-        <Buttons onAction={handleButton} />
+        <Buttons onAction={handleButton} onHoldCancel={() => { if (!splash && identity) goHome(); }} />
         {/* Always available at login (where Settings can't be reached); post-login
             it follows the SETTINGS → KEYBOARD toggle. */}
         {(keyboardEnabled || !identity) && (

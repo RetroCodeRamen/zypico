@@ -7,7 +7,9 @@
 // same staging wisp/buddies/messages follow).
 
 export interface Discovery {
-  kind: "traveler" | "station";
+  /** traveler = new face; reunion = a known face returned; station = new node;
+   *  station-changed = a known station's services changed since last visit. */
+  kind: "traveler" | "station" | "reunion" | "station-changed";
   /** The handle / station name the Wisp will recount. */
   name: string;
   /** Epoch ms it was noticed. */
