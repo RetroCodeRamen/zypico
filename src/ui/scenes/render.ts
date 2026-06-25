@@ -245,6 +245,9 @@ export interface ScreenModel {
   workshop?: WorkshopView | null;
   /** Names of your authored carts (WORKSHOP → MY CARTS list). */
   myCartNames?: string[];
+  /** ALERTS list (the attention light, REDESIGN §1) + its cursor. */
+  alerts?: AlertItem[];
+  alertsCursor?: number;
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -1379,6 +1382,29 @@ export function drawBattle(buf: PixelBuffer, frame: number, view: BattleView): v
   }
 }
 
+// ---- Alerts: the Tamagotchi attention light (REDESIGN §1) -------------------
+export interface AlertItem { label: string; hue: number }
+
+export function drawAlerts(buf: PixelBuffer, items: AlertItem[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "ALERTS", C.title);
+  if (items.length > 0) drawText(buf, buf.width - measureText(`${items.length}`) - 3, 2, `${items.length}`, C.warn);
+  divider(buf, 9);
+  if (items.length === 0) {
+    drawTextCentered(buf, 32, "ALL CLEAR", C.ok);
+    drawTextCentered(buf, 42, "NOTHING NEEDS YOU", C.dim);
+  } else {
+    const maxChars = Math.floor((buf.width - 10) / CELL_W);
+    items.slice(0, 7).forEach((it, i) => {
+      const y = 13 + i * 8;
+      if (i === cursor) drawText(buf, 2, y, ">", C.cursor);
+      drawText(buf, 8, y, it.label.slice(0, maxChars), i === cursor ? C.textHi : it.hue);
+    });
+  }
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, items.length ? "ACCEPT jump  CANCEL back" : "CANCEL back", C.dim);
+}
+
 export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel): void {
   if (model.editing) {
     drawEditor(buf, frame, model.editing);
@@ -1449,6 +1475,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
     return;
   }
   if (place.id === "arcade") drawCarousel(buf, "ARCADE", "", ARCADE_CARDS, nav.itemIndex, model.carouselSlideAt ?? 0);
+  else if (place.id === "alerts") drawAlerts(buf, model.alerts ?? [], model.alertsCursor ?? 0);
   else if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
   else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted, model.keyboardEnabled ?? true, model.staySignedIn ?? true);
   else drawPlace(buf, place, nav);

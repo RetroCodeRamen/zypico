@@ -13,17 +13,22 @@ export function Screen({
   model,
   onIcon,
   fps = 8,
+  hasAlerts = false,
 }: {
   model: ScreenModel;
   onIcon: (index: number) => void;
   /** Matrix refresh rate; bumped for the Relay carousel slide (the Wisp, whose
    *  frame-based wander assumes 8 fps, isn't on screen then). */
   fps?: number;
+  /** Lights the Alerts icon (the attention light) when something needs you. */
+  hasAlerts?: boolean;
 }) {
   const renderIcon = (place: PlaceDef, index: number) => (
     <button
       key={place.id}
-      className={`place-icon ${place.scope} ${index === model.nav.iconIndex ? "active" : ""}`}
+      className={`place-icon ${place.scope}`
+        + (index === model.nav.iconIndex ? " active" : "")
+        + (place.id === "alerts" && hasAlerts ? " attention" : "")}
       tabIndex={-1}
       onClick={() => onIcon(index)}
       aria-label={place.label}

@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { Screen } from "@ui/shell/Screen.tsx";
 import { PixelScreen } from "@ui/pixel/PixelScreen.tsx";
 import { Buttons, type ButtonAction } from "@ui/shell/Buttons.tsx";
@@ -97,6 +97,7 @@ export function App() {
   }));
   const [friendsCursor, setFriendsCursor] = useState(0);
   const [friendsThread, setFriendsThread] = useState<string | null>(null); // buddy fingerprint
+  const pendingThreadRef = useRef<string | null>(null); // a thread to open on entering TRAVELERS (alert jump)
   const [commonsPanel, setCommonsPanel] = useState<"chat" | "stations">("chat"); // Commons sub-view
   // The Relay is one place holding scenes (Commons/Travelers/Post/Pages/Stations,
   // REDESIGN §8). relayScene = which scene is open (null = the scene picker);
@@ -297,16 +298,21 @@ export function App() {
   // Leaving the Relay drops back to its scene picker.
   useEffect(() => { if (!inRelay) setRelayScene(null); }, [inRelay]);
 
-  // Reset the TRAVELERS cursor/thread whenever we open that scene.
+  // Reset the TRAVELERS cursor/thread whenever we open that scene — unless an
+  // alert jump asked to open a specific thread (pendingThreadRef).
   useEffect(() => {
     if (inFriends) {
       setFriendsCursor(0);
-      setFriendsThread(null);
+      setFriendsThread(pendingThreadRef.current);
+      pendingThreadRef.current = null;
     }
   }, [inFriends]);
 
   // Default the Commons to chat each time you open it.
   useEffect(() => { if (inCommons) setCommonsPanel("chat"); }, [inCommons]);
+
+  const inAlerts = identity != null && nav.level === "place" && currentPlace(nav).id === "alerts";
+  useEffect(() => { if (inAlerts) setAlertsCursor(0); }, [inAlerts]);
 
   // Land a care verb's effect on the Mood, then return to the care panel. Shared
   // by the natural end of the animation and an early skip.
@@ -324,6 +330,87 @@ export function App() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wispView?.panel === "act" ? wispView.startedAt : null]);
+
+  // ---- Alerts: the Tamagotchi attention light (REDESIGN §1) ----
+  // Derived from current state. dm/guestbook use a "seen" baseline (so old
+  // threads don't nag on login); mail uses its read flags; Wisp-needs come from
+  // mood. ACCEPT on an alert jumps to the source, which clears it.
+  const [dmSeen, setDmSeen] = useState<Record<string, number>>({});
+  const [gbSeen, setGbSeen] = useState(0);
+  const [alertsCursor, setAlertsCursor] = useState(0);
+  const [alertTick, setAlertTick] = useState(0); // slow tick so time-based Wisp-needs surface
+  useEffect(() => { const iv = setInterval(() => setAlertTick((t) => t + 1), 30_000); return () => clearInterval(iv); }, []);
+
+  // Baseline existing DMs/guestbook as "seen" once per login, so only NEW
+  // activity this session raises an alert.
+  const baselineRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!identity) { baselineRef.current = null; return; }
+    if (baselineRef.current !== identity.fingerprint) {
+      const seen: Record<string, number> = {};
+      for (const [fp, msgs] of Object.entries(social.dmThreads)) seen[fp] = msgs.reduce((n, m) => n + (m.out ? 0 : 1), 0);
+      setDmSeen(seen);
+      setGbSeen(pageExchange.myGuestbook.length);
+      baselineRef.current = identity.fingerprint;
+    }
+  }, [identity, social.dmThreads, pageExchange.myGuestbook]);
+
+  interface Alert { key: string; kind: "wisp" | "mail" | "dm" | "guestbook"; ref?: string; label: string; hue: number }
+  const NEEDY = ["hungry", "messy", "sleepy", "lonely", "sad"];
+  const alerts = useMemo<Alert[]>(() => {
+    if (!identity) return [];
+    void alertTick; // recompute on the slow tick (time-based Wisp-needs)
+    const out: Alert[] = [];
+    const ms = moodState(wisp.mood, Date.now());
+    if (NEEDY.includes(ms)) out.push({ key: `wisp:${ms}`, kind: "wisp", label: `WISP IS ${ms.toUpperCase()}`, hue: 9 });
+    if (postOffice.unread > 0) out.push({ key: `mail:${postOffice.unread}`, kind: "mail", label: `${postOffice.unread} NEW MAIL`, hue: 12 });
+    for (const [fp, msgs] of Object.entries(social.dmThreads)) {
+      const inbound = msgs.reduce((n, m) => n + (m.out ? 0 : 1), 0);
+      if (inbound > (dmSeen[fp] ?? 0) && friendsThread !== fp) {
+        out.push({ key: `dm:${fp}:${inbound}`, kind: "dm", ref: fp, label: `${resolveHandle(fp)} SENT A DM`, hue: 11 });
+      }
+    }
+    const gb = pageExchange.myGuestbook.length;
+    if (gb > gbSeen) out.push({ key: `gb:${gb}`, kind: "guestbook", label: `${gb - gbSeen} GUESTBOOK NOTE${gb - gbSeen > 1 ? "S" : ""}`, hue: 14 });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity, wisp.mood, postOffice.unread, social.dmThreads, friendsThread, pageExchange.myGuestbook, dmSeen, gbSeen, alertTick]);
+
+  // A soft beep + the icon lights when a genuinely NEW alert appears.
+  const prevAlertKeys = useRef("");
+  const alertKeys = alerts.map((a) => a.key).join("|");
+  useEffect(() => {
+    const prev = new Set(prevAlertKeys.current.split("|").filter(Boolean));
+    if (alerts.some((a) => !prev.has(a.key))) sfx("connect");
+    prevAlertKeys.current = alertKeys;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alertKeys]);
+
+  // Keep the alerts cursor in range as the list shrinks.
+  useEffect(() => { if (alertsCursor >= alerts.length) setAlertsCursor(0); }, [alerts.length, alertsCursor]);
+
+  // Jump to an alert's source (and clear it). Clears overlays first, like onIcon.
+  const jumpToAlert = (a: Alert) => {
+    sfx("accept");
+    setPageView(null); setPostView(null); setVaultView(null); setExchangeView(null); setWorkshop(null);
+    if (a.kind === "wisp") {
+      setRelayScene(null); setWispView({ panel: "care", cursor: 0 });
+      navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "home") });
+    } else if (a.kind === "mail") {
+      setWispView(null); setRelayScene("post"); setRelaySubCursor(0); setPostView({ panel: "inbox", cursor: 0 });
+      navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "relay") });
+    } else if (a.kind === "dm" && a.ref) {
+      setWispView(null);
+      const fp = a.ref;
+      setDmSeen((s) => ({ ...s, [fp]: social.dmThreads[fp]?.reduce((n, m) => n + (m.out ? 0 : 1), 0) ?? 0 }));
+      pendingThreadRef.current = fp; setRelayScene("travelers");
+      navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "relay") });
+    } else if (a.kind === "guestbook") {
+      setWispView(null); setGbSeen(pageExchange.myGuestbook.length);
+      setRelayScene("pages"); setPageView({ panel: "guestbook", cursor: 0 });
+      navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "relay") });
+    }
+  };
 
   // ---- Button controller (shared by on-screen buttons + arrow keys) ----
   const handleButton = (action: ButtonAction) => {
@@ -677,6 +764,14 @@ export function App() {
     // falls through to cycle the cursor.
     if (inArcade && action === "select") setCarouselSlideAt(Date.now());
 
+    // ALERTS place: the attention list. SELECT moves, ACCEPT jumps to the source.
+    if (nav.level === "place" && currentPlace(nav).id === "alerts") {
+      if (action === "select") setAlertsCursor((c) => (alerts.length ? (c + 1) % alerts.length : 0));
+      else if (action === "accept") { const a = alerts[alertsCursor]; if (a) jumpToAlert(a); }
+      else if (action === "cancel") navDispatch("cancel");
+      return;
+    }
+
     if (action === "accept" && nav.level === "place") {
       const place = currentPlace(nav);
       const item = place.items[nav.itemIndex];
@@ -867,6 +962,8 @@ export function App() {
                 ? "CANCEL back"
               : inRelay && (relayScene === "post" || relayScene === "pages")
                 ? "SELECT move · ACCEPT open · CANCEL back"
+              : inAlerts
+                ? alerts.length ? "SELECT move · ACCEPT jump · CANCEL back" : "CANCEL back"
               : "SELECT move · ACCEPT enter · CANCEL back";
 
   return (
@@ -900,6 +997,7 @@ export function App() {
             </div>
           ) : identity ? (
             <Screen
+              hasAlerts={alerts.length > 0}
               fps={(inRelay && relayScene === null) || inArcade || wispView?.panel === "act" ? 16 : 8}
               model={{
                 nav, editing, relay: link.view, wisp, wispView, canRaise: CAN_RAISE, muted,
@@ -943,6 +1041,8 @@ export function App() {
                 identityLabel: { handle: identity.handle, fpShort: identity.fingerprint.slice(0, 10).toUpperCase() },
                 keyboardEnabled,
                 staySignedIn,
+                alerts: alerts.map((a) => ({ label: a.label, hue: a.hue })),
+                alertsCursor,
                 workshop,
                 myCartNames: myCarts.map((c) => c.name),
                 stationList: social.stations
