@@ -30,6 +30,8 @@ import { CartRunner, cleanLuaError } from "@ui/cart/CartRunner.ts";
 import { createWispGame, WISP_GAMES, type WispGame } from "@ui/wispgames/index.ts";
 import { useBattle } from "@ui/hooks/useBattle.ts";
 import { drawBattle } from "@ui/scenes/render.ts";
+import { useItems } from "@ui/hooks/useItems.ts";
+import { ITEM_DEFS, randomTreat } from "@core/items.ts";
 import { SAMPLE_CARTS } from "@ui/cart/samples.ts";
 // Bundle the Lua WASM as a local asset so Carts run offline on the board.
 import luaWasmUrl from "wasmoon/dist/glue.wasm?url";
@@ -130,11 +132,15 @@ export function App() {
   };
   const battle = useBattle(identity, link, () => formWireIndex(wispForm(wisp).id), resolveHandle);
 
+  // Items & collection (REDESIGN §10): earned by playing/battling/exploring,
+  // used from the Bag. Backed up in the Vault.
+  const itemBag = useItems(identity);
+
   // Account Vault: encrypted backup/restore at a Station. Restore re-loads every
   // local hook from the freshly-restored storage.
   const reloadLocal = (fp: string) => {
     loadCompanion(fp); social.load(fp); loadPages(fp);
-    pageExchange.loadGuests(fp); postOffice.load(fp); cartExchange.load(fp);
+    pageExchange.loadGuests(fp); postOffice.load(fp); cartExchange.load(fp); itemBag.load(fp);
   };
   const vault = useVault(identity, link, reloadLocal);
   const [vaultView, setVaultView] = useState<VaultView | null>(null);
@@ -185,6 +191,7 @@ export function App() {
   const exitWispGame = () => {
     setWispGame(null);
     setWisp((w) => ({ ...w, mood: applyCare(w.mood, "play") })); // playing IS the PLAY care
+    if (Math.random() < 0.5) itemBag.grant(randomTreat()); // playing sometimes finds a treat
     sfx("cancel");
   };
   const gameDraw = (buf: PixelBuffer, frame: number) => {
@@ -409,6 +416,56 @@ export function App() {
       setWispView(null); setGbSeen(pageExchange.myGuestbook.length);
       setRelayScene("pages"); setPageView({ panel: "guestbook", cursor: 0 });
       navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "relay") });
+    }
+  };
+
+  // ---- Items earned by doing things (REDESIGN §10) ----
+  const [bagCursor, setBagCursor] = useState(0);
+  const inBag = identity != null && nav.level === "place" && currentPlace(nav).id === "bag";
+  useEffect(() => { if (inBag) setBagCursor(0); }, [inBag]);
+
+  // Winning a battle earns an Arena Badge (once per match — on entering "won").
+  const prevBattlePhase = useRef("");
+  useEffect(() => {
+    if (battle.view.phase === "won" && prevBattlePhase.current !== "won") itemBag.grant("arena_badge");
+    prevBattlePhase.current = battle.view.phase;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battle.view.phase]);
+
+  // New discoveries (meeting a Traveler / hearing a Station) leave a souvenir.
+  // Baseline at login so historical discoveries don't dump items on first load.
+  const discoProcessed = useRef<number | null>(null);
+  useEffect(() => {
+    const list = social.discoveries;
+    if (!identity) { discoProcessed.current = null; return; }
+    if (discoProcessed.current === null) { discoProcessed.current = list.length; return; } // baseline
+    for (let i = discoProcessed.current; i < list.length; i++) {
+      itemBag.grant(list[i].kind === "station" ? "relay_shard" : "traveler_pin");
+    }
+    discoProcessed.current = list.length;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [social.discoveries, identity]);
+
+  // Resolve the inventory into displayable Bag rows (catalog metadata + count).
+  const bagItems = itemBag.items
+    .filter((e) => ITEM_DEFS[e.id])
+    .map((e) => ({ id: e.id, count: e.count, ...ITEM_DEFS[e.id] }));
+  useEffect(() => { if (bagCursor >= bagItems.length) setBagCursor(0); }, [bagItems.length, bagCursor]);
+
+  // Use a Bag item: a treat feeds the Wisp (treat sequence at Home, consumed);
+  // a toy opens the play picker. Non-usable items are keepsakes (no-op).
+  const useBagItem = (id: string) => {
+    const def = ITEM_DEFS[id];
+    if (!def?.usable) return;
+    if (def.kind === "treat") {
+      itemBag.consume(id);
+      setWispView({ panel: "act", cursor: CARES.indexOf("treat"), care: "treat", startedAt: Date.now() });
+      sfx("feed");
+      navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "home") });
+    } else if (def.kind === "toy") {
+      setWispView({ panel: "play", cursor: 0 });
+      sfx("accept");
+      navDispatch({ type: "goto", index: PLACES.findIndex((p) => p.id === "home") });
     }
   };
 
@@ -772,6 +829,14 @@ export function App() {
       return;
     }
 
+    // BAG place: browse your items; ACCEPT uses the highlighted one (if usable).
+    if (inBag) {
+      if (action === "select") setBagCursor((c) => (bagItems.length ? (c + 1) % bagItems.length : 0));
+      else if (action === "accept") { const it = bagItems[bagCursor]; if (it) useBagItem(it.id); }
+      else if (action === "cancel") navDispatch("cancel");
+      return;
+    }
+
     if (action === "accept" && nav.level === "place") {
       const place = currentPlace(nav);
       const item = place.items[nav.itemIndex];
@@ -964,6 +1029,8 @@ export function App() {
                 ? "SELECT move · ACCEPT open · CANCEL back"
               : inAlerts
                 ? alerts.length ? "SELECT move · ACCEPT jump · CANCEL back" : "CANCEL back"
+              : inBag
+                ? bagItems.length ? "SELECT move · ACCEPT use · CANCEL back" : "CANCEL back"
               : "SELECT move · ACCEPT enter · CANCEL back";
 
   return (
@@ -1043,6 +1110,8 @@ export function App() {
                 staySignedIn,
                 alerts: alerts.map((a) => ({ label: a.label, hue: a.hue })),
                 alertsCursor,
+                bag: bagItems.map((it) => ({ name: it.name, count: it.count, kind: it.kind, desc: it.desc, usable: it.usable })),
+                bagCursor,
                 workshop,
                 myCartNames: myCarts.map((c) => c.name),
                 stationList: social.stations

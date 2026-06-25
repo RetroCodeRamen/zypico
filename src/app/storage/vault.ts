@@ -11,6 +11,8 @@ import { type GuestEntry, loadGuestbook, saveGuestbook } from "./guestbook.ts";
 import { type DmThreads, loadDmThreads, saveDmThreads } from "./messages.ts";
 import { type InboxMail, type OutboxMail, loadInbox, loadOutbox, saveInbox, saveOutbox } from "./mail.ts";
 import { type Discovery, loadDiscoveries, saveDiscoveries } from "./discoveries.ts";
+import { type InvEntry } from "@core/items.ts";
+import { loadItems, saveItems } from "./items.ts";
 
 export interface VaultBlob {
   v: 1;
@@ -22,6 +24,8 @@ export interface VaultBlob {
   inbox: InboxMail[];
   outbox: OutboxMail[];
   discoveries: Discovery[];
+  /** Optional (added later) — older blobs simply won't carry it. */
+  items?: InvEntry[];
 }
 
 /** Collect everything worth backing up for this identity. */
@@ -36,6 +40,7 @@ export function gatherVault(fingerprint: string): VaultBlob {
     inbox: loadInbox(fingerprint),
     outbox: loadOutbox(fingerprint),
     discoveries: loadDiscoveries(fingerprint),
+    items: loadItems(fingerprint),
   };
 }
 
@@ -50,4 +55,5 @@ export function applyVault(fingerprint: string, blob: VaultBlob): void {
   if (blob.inbox) saveInbox(fingerprint, blob.inbox);
   if (blob.outbox) saveOutbox(fingerprint, blob.outbox);
   if (blob.discoveries) saveDiscoveries(fingerprint, blob.discoveries);
+  if (blob.items) saveItems(fingerprint, blob.items);
 }

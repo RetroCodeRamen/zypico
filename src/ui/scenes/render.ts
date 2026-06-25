@@ -248,6 +248,9 @@ export interface ScreenModel {
   /** ALERTS list (the attention light, REDESIGN §1) + its cursor. */
   alerts?: AlertItem[];
   alertsCursor?: number;
+  /** BAG contents (items/collection, REDESIGN §10) + its cursor. */
+  bag?: BagItem[];
+  bagCursor?: number;
   /** Whether the test-only "raise a heart" action is available (dev builds). */
   canRaise: boolean;
   /** Sound muted (shown as a small indicator on home). */
@@ -1405,6 +1408,36 @@ export function drawAlerts(buf: PixelBuffer, items: AlertItem[], cursor: number)
   drawTextCentered(buf, 73, items.length ? "ACCEPT jump  CANCEL back" : "CANCEL back", C.dim);
 }
 
+// ---- Bag: items & collection (REDESIGN §10) ---------------------------------
+export interface BagItem { name: string; count: number; kind: string; desc: string; usable: boolean }
+
+export function drawBag(buf: PixelBuffer, items: BagItem[], cursor: number): void {
+  buf.clear(C.bg);
+  drawText(buf, 3, 2, "BAG", C.title);
+  drawText(buf, buf.width - measureText("LOC") - 3, 2, "LOC", C.tagLocal);
+  divider(buf, 9);
+  if (items.length === 0) {
+    drawTextCentered(buf, 30, "YOUR BAG IS EMPTY", C.dim);
+    drawTextCentered(buf, 40, "PLAY + EXPLORE TO FIND ITEMS", C.dim);
+    buf.fillRect(0, 72, buf.width, 8, C.ground);
+    drawTextCentered(buf, 73, "CANCEL back", C.dim);
+    return;
+  }
+  // Item rows (name xN), kind-tinted, up to 6 visible.
+  const hueOf: Record<string, number> = { treat: 9, toy: 11, badge: 10, souvenir: 14 };
+  items.slice(0, 6).forEach((it, i) => {
+    const y = 12 + i * 7;
+    if (i === cursor) drawText(buf, 2, y, ">", C.cursor);
+    drawText(buf, 8, y, `${it.name} x${it.count}`.slice(0, 22), i === cursor ? C.textHi : (hueOf[it.kind] ?? C.text));
+  });
+  // Selected item's description + use hint.
+  const sel = items[Math.min(cursor, items.length - 1)];
+  divider(buf, 56);
+  wrapText(sel.desc, Math.floor((buf.width - 4) / CELL_W)).slice(0, 2).forEach((ln, i) => drawText(buf, 2, 59 + i * 7, ln, C.text));
+  buf.fillRect(0, 72, buf.width, 8, C.ground);
+  drawTextCentered(buf, 73, sel.usable ? "ACCEPT use  CANCEL back" : "A KEEPSAKE  CANCEL back", C.dim);
+}
+
 export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel): void {
   if (model.editing) {
     drawEditor(buf, frame, model.editing);
@@ -1476,6 +1509,7 @@ export function drawScreen(buf: PixelBuffer, frame: number, model: ScreenModel):
   }
   if (place.id === "arcade") drawCarousel(buf, "ARCADE", "", ARCADE_CARDS, nav.itemIndex, model.carouselSlideAt ?? 0);
   else if (place.id === "alerts") drawAlerts(buf, model.alerts ?? [], model.alertsCursor ?? 0);
+  else if (place.id === "bag") drawBag(buf, model.bag ?? [], model.bagCursor ?? 0);
   else if (place.id === "profile") drawProfile(buf, place, nav, model.identityLabel);
   else if (place.id === "settings") drawSettings(buf, place, nav, model.relay, model.muted, model.keyboardEnabled ?? true, model.staySignedIn ?? true);
   else drawPlace(buf, place, nav);
